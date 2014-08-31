@@ -607,6 +607,7 @@ static int cond_write_bool(hashtab_key_t key, hashtab_datum_t datum, void *ptr)
 	unsigned int items, items2;
 	struct policy_data *pd = ptr;
 	struct policy_file *fp = pd->fp;
+	struct policydb *p = pd->p;
 
 	booldatum = (cond_bool_datum_t *) datum;
 
@@ -621,6 +622,15 @@ static int cond_write_bool(hashtab_key_t key, hashtab_datum_t datum, void *ptr)
 	items = put_entry(key, 1, len, fp);
 	if (items != len)
 		return POLICYDB_ERROR;
+
+	if (p->policy_type != POLICY_KERN &&
+	    p->policyvers >= MOD_POLICYDB_VERSION_TUNABLE_SEP) {
+		buf[0] = cpu_to_le32(booldatum->flags);
+		items = put_entry(buf, sizeof(uint32_t), 1, fp);
+		if (items != 1)
+			return POLICYDB_ERROR;
+	}
+
 	return POLICYDB_SUCCESS;
 }
 
@@ -724,6 +734,14 @@ static int cond_write_node(policydb_t * p,
 		if (avrule_write_list(node->avtrue_list, fp))
 			return POLICYDB_ERROR;
 		if (avrule_write_list(node->avfalse_list, fp))
+			return POLICYDB_ERROR;
+	}
+
+	if (p->policy_type != POLICY_KERN &&
+	    p->policyvers >= MOD_POLICYDB_VERSION_TUNABLE_SEP) {
+		buf[0] = cpu_to_le32(node->flags);
+		items = put_entry(buf, sizeof(uint32_t), 1, fp);
+		if (items != 1)
 			return POLICYDB_ERROR;
 	}
 
@@ -875,8 +893,11 @@ static int write_cons_helper(policydb_t * p,
 				if (ebitmap_write(&e->names, fp)) {
 					return POLICYDB_ERROR;
 				}
-				if (p->policy_type != POLICY_KERN &&
-				    type_set_write(e->type_names, fp)) {
+				if ((p->policy_type != POLICY_KERN &&
+						type_set_write(e->type_names, fp)) ||
+						(p->policy_type == POLICY_KERN &&
+						(p->policyvers >= POLICYDB_VERSION_CONSTRAINT_NAMES) &&
+						type_set_write(e->type_names, fp))) {
 					return POLICYDB_ERROR;
 				}
 				break;
@@ -958,6 +979,28 @@ static int class_write(hashtab_key_t key, hashtab_datum_t datum, void *ptr)
 			return POLICYDB_ERROR;
 	}
 
+	if ((p->policy_type == POLICY_KERN &&
+	     p->policyvers >= POLICYDB_VERSION_NEW_OBJECT_DEFAULTS) ||
+	    (p->policy_type == POLICY_BASE &&
+	     p->policyvers >= MOD_POLICYDB_VERSION_NEW_OBJECT_DEFAULTS)) {
+		buf[0] = cpu_to_le32(cladatum->default_user);
+		buf[1] = cpu_to_le32(cladatum->default_role);
+		buf[2] = cpu_to_le32(cladatum->default_range);
+		items = put_entry(buf, sizeof(uint32_t), 3, fp);
+		if (items != 3)
+			return POLICYDB_ERROR;
+	}
+
+	if ((p->policy_type == POLICY_KERN &&
+	     p->policyvers >= POLICYDB_VERSION_DEFAULT_TYPE) ||
+	    (p->policy_type == POLICY_BASE &&
+	     p->policyvers >= MOD_POLICYDB_VERSION_DEFAULT_TYPE)) {
+		buf[0] = cpu_to_le32(cladatum->default_type);
+		items = put_entry(buf, sizeof(uint32_t), 1, fp);
+		if (items != 1)
+			return POLICYDB_ERROR;
+	}
+
 	return POLICYDB_SUCCESS;
 }
 
@@ -971,6 +1014,19 @@ static int role_write(hashtab_key_t key, hashtab_datum_t datum, void *ptr)
 	struct policydb *p = pd->p;
 
 	role = (role_datum_t *) datum;
+
+	/*
+	 * Role attributes are redundant for policy.X, skip them
+	 * when writing the roles symbol table. They are also skipped
+	 * when pp is downgraded.
+	 *
+	 * Their numbers would be deducted in policydb_write().
+	 */
+	if ((role->flavor == ROLE_ATTRIB) &&
+	    ((p->policy_type == POLICY_KERN) ||
+	     (p->policy_type != POLICY_KERN &&
+	      p->policyvers < MOD_POLICYDB_VERSION_ROLEATTRIB)))
+		return POLICYDB_SUCCESS;
 
 	len = strlen(key);
 	items = 0;
@@ -1752,34 +1808,38 @@ static int scope_write(hashtab_key_t key, hashtab_datum_t datum, void *ptr)
 	uint32_t static_buf[32], *dyn_buf = NULL, *buf;
 	size_t key_len = strlen(key);
 	unsigned int items = 2 + scope->decl_ids_len, i;
+	int rc;
 
+	buf = static_buf;
 	if (items >= (sizeof(static_buf) / 4)) {
 		/* too many things required, so dynamically create a
 		 * buffer.  this would have been easier with C99's
 		 * dynamic arrays... */
-		if ((dyn_buf = malloc(items * sizeof(*dyn_buf))) == NULL) {
-			return POLICYDB_ERROR;
-		}
+		rc = POLICYDB_ERROR;
+		dyn_buf = malloc(items * sizeof(*dyn_buf));
+		if (!dyn_buf)
+			goto err;
 		buf = dyn_buf;
-	} else {
-		buf = static_buf;
 	}
 	buf[0] = cpu_to_le32(key_len);
+
+	rc = POLICYDB_ERROR;
 	if (put_entry(buf, sizeof(*buf), 1, fp) != 1 ||
-	    put_entry(key, 1, key_len, fp) != key_len) {
-		return POLICYDB_ERROR;
-	}
+	    put_entry(key, 1, key_len, fp) != key_len)
+		goto err;
 	buf[0] = cpu_to_le32(scope->scope);
 	buf[1] = cpu_to_le32(scope->decl_ids_len);
-	for (i = 0; i < scope->decl_ids_len; i++) {
+
+	for (i = 0; i < scope->decl_ids_len; i++)
 		buf[2 + i] = cpu_to_le32(scope->decl_ids[i]);
-	}
-	if (put_entry(buf, sizeof(*buf), items, fp) != items) {
-		free(dyn_buf);
-		return POLICYDB_ERROR;
-	}
+
+	rc = POLICYDB_ERROR;
+	if (put_entry(buf, sizeof(*buf), items, fp) != items)
+		goto err;
+	rc = POLICYDB_SUCCESS;
+err:
 	free(dyn_buf);
-	return POLICYDB_SUCCESS;
+	return rc;
 }
 
 static int type_attr_uncount(hashtab_key_t key __attribute__ ((unused)),
@@ -1790,6 +1850,19 @@ static int type_attr_uncount(hashtab_key_t key __attribute__ ((unused)),
 
 	if (typdatum->flavor == TYPE_ATTRIB) {
 		/* uncount attribute from total number of types */
+		(*p_nel)--;
+	}
+	return 0;
+}
+
+static int role_attr_uncount(hashtab_key_t key __attribute__ ((unused)),
+			     hashtab_datum_t datum, void *args)
+{
+	role_datum_t *role = datum;
+	uint32_t *p_nel = args;
+
+	if (role->flavor == ROLE_ATTRIB) {
+		/* uncount attribute from total number of roles */
 		(*p_nel)--;
 	}
 	return 0;
@@ -1926,7 +1999,7 @@ int policydb_write(policydb_t * p, struct policy_file *fp)
 	num_syms = info->sym_num;
 	for (i = 0; i < num_syms; i++) {
 		buf[0] = cpu_to_le32(p->symtab[i].nprim);
-		buf[1] = cpu_to_le32(p->symtab[i].table->nel);
+		buf[1] = p->symtab[i].table->nel;
 
 		/*
 		 * A special case when writing type/attribute symbol table.
@@ -1939,6 +2012,20 @@ int policydb_write(policydb_t * p, struct policy_file *fp)
 		    p->policy_type == POLICY_KERN) {
 			hashtab_map(p->symtab[i].table, type_attr_uncount, &buf[1]);
 		}
+
+		/*
+		 * Another special case when writing role/attribute symbol
+		 * table, role attributes are redundant for policy.X, or
+		 * when the pp's version is not big enough. So deduct
+		 * their numbers from p_roles.table->nel.
+		 */
+		if ((i == SYM_ROLES) &&
+		    ((p->policy_type == POLICY_KERN) ||
+		     (p->policy_type != POLICY_KERN &&
+		      p->policyvers < MOD_POLICYDB_VERSION_ROLEATTRIB)))
+			(void)hashtab_map(p->symtab[i].table, role_attr_uncount, &buf[1]);
+
+		buf[1] = cpu_to_le32(buf[1]);
 		items = put_entry(buf, sizeof(uint32_t), 2, fp);
 		if (items != 2)
 			return POLICYDB_ERROR;
