@@ -1,12 +1,12 @@
 Source: libsepol
-VCS-Git: git://anonscm.debian.org/selinux/libsepol.git
-VCS-Browser: http://anonscm.debian.org/gitweb/?p=selinux/libsepol.git;a=summary
+VCS-Git: https://anonscm.debian.org/git/selinux/libsepol.git
+VCS-Browser: https://anonscm.debian.org/gitweb/?p=selinux/libsepol.git;a=summary
 Priority: optional
 Section: libs
 Maintainer: Debian SELinux maintainers <selinux-devel@lists.alioth.debian.org>
 Uploaders: Manoj Srivastava <srivasta@debian.org>, Russell Coker <russell@coker.com.au>
-Standards-Version: 3.9.5
-Build-Depends: debhelper (>= 9), dpkg-dev (>= 1.16.0), file
+Standards-Version: 3.9.8
+Build-Depends: debhelper (>= 9), dpkg-dev (>= 1.16.0), file, flex
 Homepage: http://userspace.selinuxproject.org/
 
 Package: sepol-utils
@@ -27,7 +27,7 @@ Package: libsepol1
 Priority: required
 Architecture: linux-any
 Depends: ${misc:Depends}, ${shlibs:Depends}
-Pre-Depends: multiarch-support
+Pre-Depends: ${misc:Pre-Depends}
 Multi-Arch: same
 Description: SELinux library for manipulating binary security policies
  Security-enhanced Linux is a patch of the Linux kernel and a number

@@ -1,5 +1,60 @@
+libsepol (2.6-2) unstable; urgency=medium
+
+  * Team upload.
+  * debian/patches/fix_use-after-free_python3.patch: Fix use-after-free when
+    using python3 bindings, this was preventing to modify/delete
+    bool|iface|user, from upstream (Closes: #846484)
+
+ -- Laurent Bigonville <bigon@debian.org>  Sun, 04 Dec 2016 00:19:56 +0100
+
+libsepol (2.6-1) unstable; urgency=medium
+
+  * Team upload.
+  * New upstream release
+    - Make the build reproducible (Closes: #825656)
+    - Produce more meaningful error messages for conflicting type rules
+      (Closes: #832331)
+  * debian/libsepol1.symbols: Add the Build-Depends-Package field
+  * debian/control: Bump Standards-Version to 3.9.8 (no further changes)
+  * debian/gbp.conf: Rename git-buildpackage section to buildpackage
+
+ -- Laurent Bigonville <bigon@debian.org>  Thu, 27 Oct 2016 15:54:09 +0200
+
+libsepol (2.5-1) unstable; urgency=medium
+
+  * Team upload.
+  * New upstream release
+    - Adjust .symbols file. The symbols are now versioned
+  * debian/gbp.conf: Sign tags by default
+  * debian/control: Bump Standards-Version to 3.9.7 (no further changes)
+  * debian/control: Fix Vcs-* URL's to please lintian (again)
+  * debian/rules: Pass --list-missing to dh_install
+
+ -- Laurent Bigonville <bigon@debian.org>  Sun, 24 Apr 2016 15:15:01 +0200
+
+libsepol (2.4-2) unstable; urgency=medium
+
+  * Team upload.
+  * Upload to unstable
+  * debian/control: Use ${misc:Pre-Depends} instead of pre-depending directly
+    against multiarch-support
+
+ -- Laurent Bigonville <bigon@debian.org>  Wed, 18 Nov 2015 17:53:15 +0100
+
+libsepol (2.4-1) experimental; urgency=medium
+
+  * Team upload.
+  * New upstream release
+    - debian/control: Add flex to the build-dependency
+    - debian/libsepol1.symbols: Adjust the .symbols file
+  * debian/control: Bump Standards-Version to 3.9.6 (no further changes)
+  * debian/watch: Update watch file URL
+
+ -- Laurent Bigonville <bigon@debian.org>  Tue, 02 Jun 2015 18:53:02 +0200
+
 libsepol (2.3-2) unstable; urgency=medium
 
+  * Team upload.
   * Drop debian/libsepol1.postinst: Reloading systemd during an upgrade in an
     uncontroled way might endup with unwanted side effects (Closes: #753727)
 
