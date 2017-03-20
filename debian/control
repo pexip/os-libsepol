@@ -1,21 +1,20 @@
 Source: libsepol
-VCS-Git: git://git.debian.org/~srivasta/debian/libsepol.git
-VCS-Browser: http://git.debian.org/git/?p=users/srivasta/debian/libsepol.git
+VCS-Git: git://anonscm.debian.org/selinux/libsepol.git
+VCS-Browser: http://anonscm.debian.org/gitweb/?p=selinux/libsepol.git;a=summary
 Priority: optional
 Section: libs
 Maintainer: Pexip AS <packaging@pexip.com>
-XSBC-Pexip-Original-Maintainer: Russell Coker <russell@coker.com.au>
-XSBC-Pexip-Original-Uploaders: Manoj Srivastava <srivasta@debian.org>
-Standards-Version: 3.8.3.0
-Build-Depends: file, dpkg-dev (>= 1.16.0)
+XSBC-Pexip-Original-Maintainer: Debian SELinux maintainers <selinux-devel@lists.alioth.debian.org>
+XSBC-Pexip-Original-Uploaders: Manoj Srivastava <srivasta@debian.org>, Russell Coker <russell@coker.com.au>
+Standards-Version: 3.9.5
+Build-Depends: debhelper (>= 9), dpkg-dev (>= 1.16.0), file
+Homepage: http://userspace.selinuxproject.org/
 XS-Pexip-Upstream: http://ftp.debian.org/debian/ jessie
 
 Package: sepol-utils
 Section: admin
-Architecture: any
-Depends: ${shlibs:Depends}
-Multi-Arch: foreign
-Conflicts: checkpolicy (<= 1.20)
+Architecture: linux-any
+Depends: ${misc:Depends}, ${shlibs:Depends}
 Description: Security Enhanced Linux policy utility programs
  This package provides a utility for a Security-enhanced
  Linux system to rewrite existing mandatory access control policy with
@@ -26,11 +25,10 @@ Description: Security Enhanced Linux policy utility programs
  set process and file security contexts and to obtain security policy
  decisions.
 
-
 Package: libsepol1
 Priority: required
-Architecture: any
-Depends: ${shlibs:Depends}
+Architecture: linux-any
+Depends: ${misc:Depends}, ${shlibs:Depends}
 Pre-Depends: multiarch-support
 Multi-Arch: same
 Description: SELinux library for manipulating binary security policies
@@ -51,16 +49,15 @@ Description: SELinux library for manipulating binary security policies
 
 Package: libsepol1-dev
 Section: libdevel
-Architecture: any
+Architecture: linux-any
+Depends: libsepol1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
 Provides: libsepol-dev
 Conflicts: libsepol-dev
-Depends: ${shlibs:Depends},  libsepol1 (= ${binary:Version})
 Multi-Arch: same
-Description: SELinux binary policy maniulation library and development files
+Description: SELinux binary policy manipulation library and development files
  libsepol allows programs to easily modify SELinux binary policies.  This
  means changing the default values for booleans, or reading the policy for
  analysis.
  .
  This package contains the headers and archives used for linking it into your
  programs.
-

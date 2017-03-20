@@ -1,3 +1,103 @@
+libsepol (2.3-2pexip1) pexip; urgency=low
+
+  * Migrate to Jessie
+
+ -- John-Mark Bell <jmb@pexip.com>  Mon, 20 Mar 2017 21:45:28 +0000
+
+libsepol (2.3-2) unstable; urgency=medium
+
+  * Drop debian/libsepol1.postinst: Reloading systemd during an upgrade in an
+    uncontroled way might endup with unwanted side effects (Closes: #753727)
+
+ -- Laurent Bigonville <bigon@debian.org>  Sun, 31 Aug 2014 20:02:14 +0200
+
+libsepol (2.3-1) unstable; urgency=medium
+
+  * Team upload.
+  * New upstream release
+  * debian/control: Mark -dev package as Multi-arch: same. (Closes: #738049)
+  * debian/control: Bump Standards-Version to 3.9.5 (no further changes)
+
+ -- Laurent Bigonville <bigon@debian.org>  Tue, 13 May 2014 17:35:24 +0200
+
+libsepol (2.2-1) unstable; urgency=low
+
+  * Team upload.
+  * New upstream release
+    - Drop debian/patches/fix-pc-file.patch: Merged upstream
+  * debian/control: Bump Standards-Version to 3.9.4 (no further changes)
+  * debian/control: Use canonical URL for VCS-Git field
+
+ -- Laurent Bigonville <bigon@debian.org>  Fri, 01 Nov 2013 13:02:59 +0100
+
+libsepol (2.1.9-2) unstable; urgency=low
+
+  * Team upload.
+  * debian/rules: Really fix cross-compilation (Closes: #688878)
+
+ -- Laurent Bigonville <bigon@debian.org>  Mon, 20 May 2013 16:21:35 +0200
+
+libsepol (2.1.9-1) unstable; urgency=low
+
+  * Team upload.
+  * New Upstream release
+  * debian/rules: Automatically chose host gcc used when cross-compiling
+    (Closes: #688878)
+
+ -- Laurent Bigonville <bigon@debian.org>  Thu, 09 May 2013 15:12:53 +0200
+
+libsepol (2.1.8-1) experimental; urgency=low
+
+  * Team upload.
+  * New Upstream release
+  * debian/gbp.conf: Change default git-buildpackage build-directory and the
+    debian-branch to "debian" instead of "upstream"
+  * debian/watch: Fix watch file URL
+
+ -- Laurent Bigonville <bigon@debian.org>  Tue, 25 Sep 2012 22:46:14 +0200
+
+libsepol (2.1.4-3) unstable; urgency=low
+
+  * Team upload.
+  * debian/rules: Append CPPFLAGS hardening flags to CFLAGS (Closes: #665316)
+  * debian/control: Re-add Conflicts/Provides for the libsepol1-dev package
+
+ -- Laurent Bigonville <bigon@debian.org>  Sun, 01 Apr 2012 00:56:03 +0200
+
+libsepol (2.1.4-2) unstable; urgency=low
+
+  * Team upload.
+  * Switch to dh sequence and debhelper 9
+    - Enable hardened build flags (Closes: #656016)
+  * Switch to dpkg-source 3.0 (quilt) format
+  * debian/control:
+    - Bump Standards-Version to 3.9.3 (no further changes)
+    - Fix typo in Description (Closes: #639704)
+    - Drop Conflict against checkpolicy (<= 1.20), it's long time gone
+    - Drop Conflict/Provide against libsepol-dev, it's long time gone too
+    - Drop Multi-Arch: same for -dev package
+    - Drop Multi-Arch: foreign for sepol-utils package
+    - Update Vcs-* fields
+    - Add Homepage field
+    - Make all binary packages arch:linux-any
+    - Put under the Debian SELinux team maintenance
+  * debian/patches/fix-pc-file.patch: Properly set multi-arch path in .pc file
+    (Closes: #658440)
+  * Add debian/gbp.conf file
+  * debian/libsepol1.postinst: Unconditionally call telinit and ignore any
+    errors (Closes: #652669, #663270)
+
+ -- Laurent Bigonville <bigon@debian.org>  Tue, 20 Mar 2012 22:07:12 +0100
+
+libsepol (2.1.4-1) unstable; urgency=low
+
+  * New upstream version, changes to handling of tunables and moved some code
+    from mcstrans to libsepol.
+  * Added new symbols expand_module_avrules, sepol_get_preserve_tunables,
+    and sepol_set_preserve_tunables.
+
+ -- Russell Coker <russell@coker.com.au>  Mon, 20 Feb 2012 15:25:22 +1100
+
 libsepol (2.1.0-1.2pexip1) pexip; urgency=low
 
   * Prepare Pexip packaging
