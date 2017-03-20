@@ -8,7 +8,7 @@ XSBC-Pexip-Original-Maintainer: Russell Coker <russell@coker.com.au>
 XSBC-Pexip-Original-Uploaders: Manoj Srivastava <srivasta@debian.org>
 Standards-Version: 3.8.3.0
 Build-Depends: file, dpkg-dev (>= 1.16.0)
-XS-Pexip-Upstream: http://archive.ubuntu.com/ubuntu/ precise
+XS-Pexip-Upstream: http://ftp.debian.org/debian/ jessie
 
 Package: sepol-utils
 Section: admin
