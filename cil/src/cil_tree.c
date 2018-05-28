@@ -1,6 +1,6 @@
 /*
  * Copyright 2011 Tresys Technology, LLC. All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  * 
@@ -339,7 +339,7 @@ static int cil_expr_to_string(struct cil_list *expr, char **out)
 	int pos = 0;
 
 	cil_list_for_each(curr, expr) {
-		if (pos > COND_EXPR_MAXDEPTH) {
+		if (pos >= COND_EXPR_MAXDEPTH) {
 			rc = SEPOL_ERR;
 			goto exit;
 		}
@@ -503,15 +503,19 @@ exit:
 void cil_tree_print_expr(struct cil_list *datum_expr, struct cil_list *str_expr)
 {
 	char *expr_str;
+	int rc;
 
 	cil_log(CIL_INFO, "(");
 
 	if (datum_expr != NULL) {
-		cil_expr_to_string(datum_expr, &expr_str);
+		rc = cil_expr_to_string(datum_expr, &expr_str);
 	} else {
-		cil_expr_to_string(str_expr, &expr_str);
+		rc = cil_expr_to_string(str_expr, &expr_str);
 	}
-
+	if (rc < 0) {
+		cil_log(CIL_INFO, "ERROR)");
+		return;
+	}
 	cil_log(CIL_INFO, "%s)", expr_str);
 	free(expr_str);
 }
@@ -701,6 +705,17 @@ void cil_tree_print_node(struct cil_tree_node *node)
 		case CIL_TYPE: {
 			struct cil_type *type = node->data;
 			cil_log(CIL_INFO, "TYPE: %s\n", type->datum.name);
+			return;
+		}
+		case CIL_EXPANDTYPEATTRIBUTE: {
+			struct cil_expandtypeattribute *attr = node->data;
+
+			fprintf(stderr, "%s %u\n", __func__, __LINE__);
+			cil_log(CIL_INFO, "(EXPANDTYPEATTRIBUTE ");
+			cil_tree_print_expr(attr->attr_datums, attr->attr_strs);
+			cil_log(CIL_INFO, "%s)\n",attr->expand ?
+					CIL_KEY_CONDTRUE : CIL_KEY_CONDFALSE);
+
 			return;
 		}
 		case CIL_TYPEATTRIBUTESET: {
@@ -1398,6 +1413,20 @@ void cil_tree_print_node(struct cil_tree_node *node)
 			return;
 
 		}
+		case CIL_IBPKEYCON: {
+			struct cil_ibpkeycon *ibpkeycon = node->data;
+
+			cil_log(CIL_INFO, "IBPKEYCON: %s", ibpkeycon->subnet_prefix_str);
+			cil_log(CIL_INFO, " (%d %d) ", ibpkeycon->pkey_low, ibpkeycon->pkey_high);
+
+			if (ibpkeycon->context)
+				cil_tree_print_context(ibpkeycon->context);
+			else if (ibpkeycon->context_str)
+				cil_log(CIL_INFO, " %s", ibpkeycon->context_str);
+
+			cil_log(CIL_INFO, "\n");
+			return;
+		}
 		case CIL_PORTCON: {
 			struct cil_portcon *portcon = node->data;
 			cil_log(CIL_INFO, "PORTCON:");
@@ -1407,6 +1436,8 @@ void cil_tree_print_node(struct cil_tree_node *node)
 				cil_log(CIL_INFO, " tcp");
 			} else if (portcon->proto == CIL_PROTOCOL_DCCP) {
 				cil_log(CIL_INFO, " dccp");
+			} else if (portcon->proto == CIL_PROTOCOL_SCTP) {
+				cil_log(CIL_INFO, " sctp");
 			}
 			cil_log(CIL_INFO, " (%d %d)", portcon->port_low, portcon->port_high);
 
@@ -1477,6 +1508,19 @@ void cil_tree_print_node(struct cil_tree_node *node)
 			} else if (netifcon->packet_context_str != NULL) {
 				cil_log(CIL_INFO, " %s", netifcon->packet_context_str);
 			}
+
+			cil_log(CIL_INFO, "\n");
+			return;
+		}
+		case CIL_IBENDPORTCON: {
+			struct cil_ibendportcon *ibendportcon = node->data;
+
+			cil_log(CIL_INFO, "IBENDPORTCON: %s %u ", ibendportcon->dev_name_str, ibendportcon->port);
+
+			if (ibendportcon->context)
+				cil_tree_print_context(ibendportcon->context);
+			else if (ibendportcon->context_str)
+				cil_log(CIL_INFO, " %s", ibendportcon->context_str);
 
 			cil_log(CIL_INFO, "\n");
 			return;
