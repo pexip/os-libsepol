@@ -174,7 +174,7 @@ static char **expr_list;
 static int expr_buf_used;
 static int expr_buf_len;
 
-static void cat_expr_buf(char *e_buf, char *string)
+static void cat_expr_buf(char *e_buf, const char *string)
 {
 	int len, new_buf_len;
 	char *p, *new_buf = e_buf;
@@ -209,7 +209,7 @@ static void cat_expr_buf(char *e_buf, char *string)
  * POLICYDB_VERSION_CONSTRAINT_NAMES) just read the e->names list.
  */
 static void get_name_list(constraint_expr_t *e, int type,
-							char *src, char *op, int failed)
+							const char *src, const char *op, int failed)
 {
 	ebitmap_t *types;
 	int rc = 0;
@@ -273,7 +273,7 @@ static void get_name_list(constraint_expr_t *e, int type,
 	return;
 }
 
-static void msgcat(char *src, char *tgt, char *op, int failed)
+static void msgcat(const char *src, const char *tgt, const char *op, int failed)
 {
 	char tmp_buf[128];
 	if (failed)
@@ -303,7 +303,7 @@ static char *get_class_info(sepol_security_class_t tclass,
 	}
 
 	/* Determine statement type */
-	char *statements[] = {
+	const char *statements[] = {
 		"constrain ",			/* 0 */
 		"mlsconstrain ",		/* 1 */
 		"validatetrans ",		/* 2 */
@@ -416,6 +416,12 @@ static int constraint_expr_eval_reason(context_struct_t *scontext,
 	char *tgt = NULL;
 	int rc = 0, x;
 	char *class_buf = NULL;
+
+	/*
+	 * The array of expression answer buffer pointers and counter.
+	 */
+	char **answer_list = NULL;
+	int answer_counter = 0;
 
 	class_buf = get_class_info(tclass, constraint, xcontext);
 	if (!class_buf) {
@@ -686,13 +692,9 @@ mls_ops:
 	expr_counter = 0;
 
 	/*
-	 * The array of expression answer buffer pointers and counter.
 	 * Generate the same number of answer buffer entries as expression
 	 * buffers (as there will never be more).
 	 */
-	char **answer_list;
-	int answer_counter = 0;
-
 	answer_list = malloc(expr_count * sizeof(*answer_list));
 	if (!answer_list) {
 		ERR(NULL, "failed to allocate answer stack");
@@ -769,7 +771,7 @@ mls_ops:
 	 * These contain the constraint components that are added to the
 	 * callers reason buffer.
 	 */
-	char *buffers[] = { class_buf, a, "); ", tmp_buf, 0 };
+	const char *buffers[] = { class_buf, a, "); ", tmp_buf, 0 };
 
 	/*
 	 * This will add the constraints to the callers reason buffer (who is
@@ -1150,20 +1152,16 @@ int hidden sepol_compute_av(sepol_security_id_t ssid,
 int hidden sepol_string_to_security_class(const char *class_name,
 			sepol_security_class_t *tclass)
 {
-	char *class = NULL;
-	sepol_security_class_t id;
+	class_datum_t *tclass_datum;
 
-	for (id = 1;; id++) {
-		class = policydb->p_class_val_to_name[id - 1];
-		if (class == NULL) {
-			ERR(NULL, "could not convert %s to class id", class_name);
-			return STATUS_ERR;
-		}
-		if ((strcmp(class, class_name)) == 0) {
-			*tclass = id;
-			return STATUS_SUCCESS;
-		}
+	tclass_datum = hashtab_search(policydb->p_classes.table,
+				      (hashtab_key_t) class_name);
+	if (!tclass_datum) {
+		ERR(NULL, "unrecognized class %s", class_name);
+		return STATUS_ERR;
 	}
+	*tclass = tclass_datum->s.value;
+	return STATUS_SUCCESS;
 }
 
 /*
@@ -1641,13 +1639,16 @@ int hidden next_entry(void *buf, struct policy_file *fp, size_t bytes)
 			return -1;
 		break;
 	case PF_USE_MEMORY:
-		if (bytes > fp->len)
+		if (bytes > fp->len) {
+			errno = EOVERFLOW;
 			return -1;
+		}
 		memcpy(buf, fp->data, bytes);
 		fp->data += bytes;
 		fp->len -= bytes;
 		break;
 	default:
+		errno = EINVAL;
 		return -1;
 	}
 	return 0;
@@ -1677,6 +1678,40 @@ size_t hidden put_entry(const void *ptr, size_t size, size_t n,
 	default:
 		return 0;
 	}
+	return 0;
+}
+
+/*
+ * Reads a string and null terminates it from the policy file.
+ * This is a port of str_read from the SE Linux kernel code.
+ *
+ * It returns:
+ *   0 - Success
+ *  -1 - Failure with errno set
+ */
+int hidden str_read(char **strp, struct policy_file *fp, size_t len)
+{
+	int rc;
+	char *str;
+
+	if (zero_or_saturated(len)) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	str = malloc(len + 1);
+	if (!str)
+		return -1;
+
+	/* it's expected the caller should free the str */
+	*strp = str;
+
+	/* next_entry sets errno */
+	rc = next_entry(str, fp, len);
+	if (rc)
+		return rc;
+
+	str[len] = '\0';
 	return 0;
 }
 
@@ -2083,7 +2118,7 @@ int hidden sepol_get_user_sids(sepol_security_id_t fromsid,
  * fixed labeling behavior like transition SIDs or task SIDs.
  */
 int hidden sepol_genfs_sid(const char *fstype,
-			   char *path,
+			   const char *path,
 			   sepol_security_class_t sclass,
 			   sepol_security_id_t * sid)
 {
