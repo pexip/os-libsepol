@@ -1,5 +1,5 @@
 
-/* Author : Stephen Smalley, <sds@epoch.ncsc.mil> */
+/* Author : Stephen Smalley, <sds@tycho.nsa.gov> */
 
 /* FLASK */
 
@@ -452,6 +452,12 @@ int ebitmap_read(ebitmap_t * e, void *fp)
 			e->node = n;
 
 		l = n;
+	}
+	if (count && l->startbit + MAPSIZE != e->highbit) {
+		printf
+		    ("security: ebitmap: hight bit %u has not the expected value %zu\n",
+		     e->highbit, l->startbit + MAPSIZE);
+		goto bad;
 	}
 
       ok:

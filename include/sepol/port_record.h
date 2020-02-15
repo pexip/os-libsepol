@@ -3,9 +3,10 @@
 
 #include <sepol/context_record.h>
 #include <sepol/handle.h>
-#include <sys/cdefs.h>
 
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct sepol_port;
 struct sepol_port_key;
@@ -15,6 +16,7 @@ typedef struct sepol_port_key sepol_port_key_t;
 #define SEPOL_PROTO_UDP 0
 #define SEPOL_PROTO_TCP 1
 #define SEPOL_PROTO_DCCP 2
+#define SEPOL_PROTO_SCTP 3
 
 /* Key */
 extern int sepol_port_compare(const sepol_port_t * port,
@@ -67,5 +69,8 @@ extern int sepol_port_clone(sepol_handle_t * handle,
 
 extern void sepol_port_free(sepol_port_t * port);
 
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
+
 #endif
