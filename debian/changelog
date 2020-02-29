@@ -1,3 +1,9 @@
+libsepol (2.8-1pexip1) pexip; urgency=medium
+
+  * Migrate to Buster
+
+ -- Vincent Sanders <vince@pexip.com>  Sat, 29 Feb 2020 15:48:18 +0000
+
 libsepol (2.8-1) unstable; urgency=medium
 
   * New upstream release
