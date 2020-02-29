@@ -1,3 +1,45 @@
+libsepol (2.8-1) unstable; urgency=medium
+
+  * New upstream release
+    - Drop debian/patches/sctp, merged upstream
+    - debian/libsepol1.symbols: Add new exported symbols
+  * debian/control: Point Vcs-* fields to new (salsa) machine
+  * debian/control: Bump Standards-Version to 4.1.4 (no further changes)
+  * debian/rules: Adjust to match upstream changes to the build system
+  * debian/rules: Use dh_missing --list-missing instead of dh_install
+  * debian/control: Downgrade libsepol1 to Priority: optional
+  * debian/copyright: Fix a spelling error, thanks to lintian
+
+ -- Laurent Bigonville <bigon@debian.org>  Mon, 28 May 2018 14:52:00 +0200
+
+libsepol (2.7-2) unstable; urgency=medium
+
+  * https://marc.info/?l=selinux&m=152078548332657&q=raw
+    Add the above patch for sctp support as part of fixing bug 895988.
+
+ -- Russell Coker <russell@coker.com.au>  Sat, 19 May 2018 10:08:20 +1000
+
+libsepol (2.7-1) unstable; urgency=medium
+
+  * New upstream release
+  * debian/control: Remove Manoj from the uploader list and add myself
+    instead. Thanks to him for all the work in the past.
+  * Bump debhelper compatibility to 10
+  * Bump Standards-Version to 4.1.0 (no further changes)
+
+ -- Laurent Bigonville <bigon@debian.org>  Sat, 09 Sep 2017 22:10:08 +0200
+
+libsepol (2.7~rc2-1) experimental; urgency=medium
+
+  * Team upload.
+  * New upstream release candidate
+    - Drop debian/patches/fix_use-after-free_python3.patch: applied upstream
+    - debian/libsepol1.symbols: Update the .symbols file
+  * debian/watch: Add support for rc releases and use macros
+  * Bump Standards-Version to 4.0.0 (no further changes)
+
+ -- Laurent Bigonville <bigon@debian.org>  Tue, 20 Jun 2017 21:16:04 +0200
+
 libsepol (2.6-2pexip1) pexip; urgency=medium
 
   * Migrate to Stretch
