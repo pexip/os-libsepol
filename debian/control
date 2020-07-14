@@ -5,9 +5,10 @@ Priority: optional
 Section: libs
 Maintainer: Debian SELinux maintainers <selinux-devel@lists.alioth.debian.org>
 Uploaders: Laurent Bigonville <bigon@debian.org>, Russell Coker <russell@coker.com.au>
-Standards-Version: 4.1.4
-Build-Depends: debhelper (>= 10), dpkg-dev (>= 1.16.0), file, flex
+Standards-Version: 4.5.0
+Build-Depends: debhelper-compat (= 12), file, flex
 Homepage: http://userspace.selinuxproject.org/
+Rules-Requires-Root: no
 
 Package: sepol-utils
 Section: admin
