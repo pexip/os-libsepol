@@ -39,6 +39,7 @@ typedef struct ebitmap {
 	uint32_t highbit;	/* highest position in the total bitmap */
 } ebitmap_t;
 
+#define ebitmap_is_empty(e) (((e)->highbit) == 0)
 #define ebitmap_length(e) ((e)->highbit)
 #define ebitmap_startbit(e) ((e)->node ? (e)->node->startbit : 0)
 #define ebitmap_startnode(e) ((e)->node)
@@ -75,6 +76,9 @@ static inline int ebitmap_node_get_bit(ebitmap_node_t * n, unsigned int bit)
 
 #define ebitmap_for_each_bit(e, n, bit) \
 	for (bit = ebitmap_start(e, &n); bit < ebitmap_length(e); bit = ebitmap_next(&n, bit)) \
+
+#define ebitmap_for_each_positive_bit(e, n, bit) \
+	ebitmap_for_each_bit(e, n, bit) if (ebitmap_node_get_bit(n, bit)) \
 
 extern int ebitmap_cmp(const ebitmap_t * e1, const ebitmap_t * e2);
 extern int ebitmap_or(ebitmap_t * dst, const ebitmap_t * e1, const ebitmap_t * e2);

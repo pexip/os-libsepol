@@ -87,7 +87,7 @@ exit:
  * datum, given the new datum and the one already present in a given symtab.
  */
 int cil_is_datum_multiple_decl(__attribute__((unused)) struct cil_symtab_datum *cur,
-                               __attribute__((unused)) struct cil_symtab_datum *old,
+                               struct cil_symtab_datum *old,
                                enum cil_flavor f)
 {
 	int rc = CIL_FALSE;
@@ -95,8 +95,12 @@ int cil_is_datum_multiple_decl(__attribute__((unused)) struct cil_symtab_datum *
 	switch (f) {
 	case CIL_TYPE:
 	case CIL_TYPEATTRIBUTE:
-		/* type and typeattribute statements insert empty datums, ret true */
-		rc = CIL_TRUE;
+		if (!old || f != FLAVOR(old)) {
+			rc = CIL_FALSE;
+		} else {
+			/* type and typeattribute statements insert empty datums */
+			rc = CIL_TRUE;
+		}
 		break;
 	default:
 		break;
@@ -126,19 +130,20 @@ int cil_gen_node(struct cil_db *db, struct cil_tree_node *ast_node, struct cil_s
 	if (symtab != NULL) {
 		rc = cil_symtab_insert(symtab, (hashtab_key_t)key, datum, ast_node);
 		if (rc == SEPOL_EEXIST) {
+			rc = cil_symtab_get_datum(symtab, (hashtab_key_t)key, &prev);
+			if (rc != SEPOL_OK) {
+				cil_log(CIL_ERR, "Re-declaration of %s %s, but previous declaration could not be found\n",cil_node_to_string(ast_node), key);
+				goto exit;
+			}
 			if (!db->multiple_decls ||
-			    cil_symtab_get_datum(symtab, (hashtab_key_t)key, &prev) != SEPOL_OK ||
 			    !cil_is_datum_multiple_decl(datum, prev, nflavor)) {
-
 				/* multiple_decls not ok, ret error */
+				struct cil_tree_node *node = NODE(prev);
 				cil_log(CIL_ERR, "Re-declaration of %s %s\n",
 					cil_node_to_string(ast_node), key);
-				if (cil_symtab_get_datum(symtab, key, &datum) == SEPOL_OK) {
-					if (sflavor == CIL_SYM_BLOCKS) {
-						struct cil_tree_node *node = datum->nodes->head->data;
-						cil_tree_log(node, CIL_ERR, "Previous declaration");
-					}
-				}
+				cil_tree_log(node, CIL_ERR, "Previous declaration of %s",
+					cil_node_to_string(node));
+				rc = SEPOL_ERR;
 				goto exit;
 			}
 			/* multiple_decls is enabled and works for this datum type, add node */
@@ -169,7 +174,6 @@ int cil_gen_node(struct cil_db *db, struct cil_tree_node *ast_node, struct cil_s
 	return SEPOL_OK;
 
 exit:
-	cil_log(CIL_ERR, "Failed to create node\n");
 	return rc;
 }
 
@@ -5304,11 +5308,9 @@ int cil_gen_macro(struct cil_db *db, struct cil_tree_node *parse_current, struct
 		struct cil_list_item *curr_param;
 		cil_list_for_each(curr_param, macro->params) {
 			if (param->str == ((struct cil_param*)curr_param->data)->str) {
-				if (param->flavor == ((struct cil_param*)curr_param->data)->flavor) {
-					cil_log(CIL_ERR, "Duplicate parameter\n");
-					cil_destroy_param(param);
-					goto exit;
-				}
+				cil_log(CIL_ERR, "Duplicate parameter\n");
+				cil_destroy_param(param);
+				goto exit;
 			}
 		}
 
@@ -5894,7 +5896,7 @@ int cil_gen_defaultrange(struct cil_tree_node *parse_current, struct cil_tree_no
 		CIL_SYN_STRING,
 		CIL_SYN_STRING | CIL_SYN_LIST,
 		CIL_SYN_STRING,
-		CIL_SYN_STRING,
+		CIL_SYN_STRING | CIL_SYN_END,
 		CIL_SYN_END
 	};
 	int syntax_len = sizeof(syntax)/sizeof(*syntax);
@@ -5917,8 +5919,8 @@ int cil_gen_defaultrange(struct cil_tree_node *parse_current, struct cil_tree_no
 	}
 
 	object = parse_current->next->next->data;
-	range = parse_current->next->next->next->data;
 	if (object == CIL_KEY_SOURCE) {
+		range = parse_current->next->next->next->data;
 		if (range == CIL_KEY_LOW) {
 			def->object_range = CIL_DEFAULT_SOURCE_LOW;
 		} else if (range == CIL_KEY_HIGH) {
@@ -5930,7 +5932,8 @@ int cil_gen_defaultrange(struct cil_tree_node *parse_current, struct cil_tree_no
 			rc = SEPOL_ERR;
 			goto exit;
 		}
-	} else if (parse_current->next->next->data == CIL_KEY_TARGET) {
+	} else if (object == CIL_KEY_TARGET) {
+		range = parse_current->next->next->next->data;
 		if (range == CIL_KEY_LOW) {
 			def->object_range = CIL_DEFAULT_TARGET_LOW;
 		} else if (range == CIL_KEY_HIGH) {
@@ -5942,8 +5945,10 @@ int cil_gen_defaultrange(struct cil_tree_node *parse_current, struct cil_tree_no
 			rc = SEPOL_ERR;
 			goto exit;
 		}
+	} else if (object == CIL_KEY_GLBLUB) {
+		def->object_range = CIL_DEFAULT_GLBLUB;
 	} else {
-		cil_log(CIL_ERR,"Expected either \'source\' or \'target\'\n");
+		cil_log(CIL_ERR,"Expected \'source\', \'target\', or \'glblub\'\n");
 		rc = SEPOL_ERR;
 		goto exit;
 	}
@@ -6122,7 +6127,7 @@ int __cil_build_ast_node_helper(struct cil_tree_node *parse_current, uint32_t *f
 		rc = SEPOL_OK;
 		goto exit;
 	} else if (parse_current->data == NULL) {
-		/* the only time parenthsis can immediately following parenthesis is if
+		/* the only time parenthesis can immediately following parenthesis is if
 		 * the parent is the root node */
 		if (parse_current->parent->parent == NULL) {
 			rc = SEPOL_OK;
@@ -6541,7 +6546,7 @@ int __cil_build_ast_last_child_helper(struct cil_tree_node *parse_current, void 
 	// At this point we no longer have any need for parse_current or any of its
 	// siblings; they have all been converted to the appropriate AST node. The
 	// full parse tree will get deleted elsewhere, but in an attempt to
-	// minimize memory useage (of which the parse tree uses alot), start
+	// minimize memory usage (of which the parse tree uses a lot), start
 	// deleting the parts we don't need now.
 	cil_tree_children_destroy(parse_current->parent);
 

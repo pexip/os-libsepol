@@ -80,10 +80,13 @@ static char *create_str_helper(const char *fmt, int num, va_list vargs)
 		goto exit;
 	}
 
+	va_end(vargs2);
+
 	return str;
 
 exit:
 	free(str);
+	va_end(vargs2);
 	return NULL;
 }
 
@@ -357,9 +360,7 @@ int ebitmap_to_strs(struct ebitmap *map, struct strs *strs, char **val_to_name)
 	uint32_t i;
 	int rc;
 
-	ebitmap_for_each_bit(map, node, i) {
-		if (!ebitmap_get_bit(map, i)) continue;
-
+	ebitmap_for_each_positive_bit(map, node, i) {
 		rc = strs_add(strs, val_to_name[i]);
 		if (rc != 0) {
 			return -1;
@@ -397,27 +398,27 @@ exit:
 	return str;
 }
 
-int stack_init(struct strs **stack)
+int strs_stack_init(struct strs **stack)
 {
 	return strs_init(stack, STACK_SIZE);
 }
 
-void stack_destroy(struct strs **stack)
+void strs_stack_destroy(struct strs **stack)
 {
 	return strs_destroy(stack);
 }
 
-int stack_push(struct strs *stack, char *s)
+int strs_stack_push(struct strs *stack, char *s)
 {
 	return strs_add(stack, s);
 }
 
-char *stack_pop(struct strs *stack)
+char *strs_stack_pop(struct strs *stack)
 {
 	return strs_remove_last(stack);
 }
 
-int stack_empty(struct strs *stack)
+int strs_stack_empty(struct strs *stack)
 {
 	return strs_num_items(stack) == 0;
 }
@@ -469,11 +470,9 @@ static int portcon_data_cmp(const void *a, const void *b)
 	rc = compare_ranges((*aa)->u.port.low_port, (*aa)->u.port.high_port,
 			    (*bb)->u.port.low_port, (*bb)->u.port.high_port);
 	if (rc == 0) {
-		if ((*aa)->u.port.protocol == (*bb)->u.port.protocol) {
-			rc = 0;
-		} else if ((*aa)->u.port.protocol == IPPROTO_TCP) {
+		if ((*aa)->u.port.protocol < (*bb)->u.port.protocol) {
 			rc = -1;
-		} else {
+		} else if ((*aa)->u.port.protocol > (*bb)->u.port.protocol) {
 			rc = 1;
 		}
 	}

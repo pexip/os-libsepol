@@ -52,7 +52,9 @@
 #include <sepol/policydb/services.h>
 #include <sepol/policydb/util.h>
 
+#include "kernel_to_common.h"
 #include "private.h"
+#include "module_internal.h"
 
 #ifdef __GNUC__
 #  define UNUSED(x) UNUSED_ ## x __attribute__((__unused__))
@@ -298,6 +300,8 @@ static int roles_gather_map(char *key, void *data, void *args)
 	role_node->role = role;
 
 	rc = list_prepend((struct list *)args, role_node);
+	if (rc != 0)
+		free(role_node);
 	return rc;
 }
 
@@ -344,6 +348,11 @@ static int typealiases_gather_map(char *key, void *data, void *arg)
 					goto exit;
 				}
 			}
+			/* As typealias_lists[scope_id] does not hold the
+			 * ownership of its items (typealias_list_destroy does
+			 * not free the list items), "key" does not need to be
+			 * strdup'ed before it is inserted in the list.
+			 */
 			list_prepend(typealias_lists[scope_id], key);
 		}
 	}
@@ -647,8 +656,8 @@ static int xperms_to_cil(const av_extended_perms_t *xperms)
 
 		if (xperms->specified & AVTAB_XPERMS_IOCTLFUNCTION) {
 			value = xperms->driver<<8 | bit;
-			low_value = xperms->driver<<8 | low_bit;
 			if (in_range) {
+				low_value = xperms->driver<<8 | low_bit;
 				cil_printf("(range 0x%hx 0x%hx)", low_value, value);
 				in_range = 0;
 			} else {
@@ -656,8 +665,8 @@ static int xperms_to_cil(const av_extended_perms_t *xperms)
 			}
 		} else if (xperms->specified & AVTAB_XPERMS_IOCTLDRIVER) {
 			value = bit << 8;
-			low_value = low_bit << 8;
 			if (in_range) {
+				low_value = low_bit << 8;
 				cil_printf("(range 0x%hx 0x%hx)", low_value, (uint16_t) (value|0xff));
 				in_range = 0;
 			} else {
@@ -724,10 +733,7 @@ static int ebitmap_to_cil(struct policydb *pdb, struct ebitmap *map, int type)
 	uint32_t i;
 	char **val_to_name = pdb->sym_val_to_name[type];
 
-	ebitmap_for_each_bit(map, node, i) {
-		if (!ebitmap_get_bit(map, i)) {
-			continue;
-		}
+	ebitmap_for_each_positive_bit(map, node, i) {
 		cil_printf("%s ", val_to_name[i]);
 	}
 
@@ -823,8 +829,8 @@ static int cil_print_attr_strs(int indent, struct policydb *pdb, int is_type, vo
 		pos = &ts->types;
 		neg = &ts->negset;
 		flags = ts->flags;
-		has_positive = pos && (ebitmap_length(pos) > 0);
-		has_negative = neg && (ebitmap_length(neg) > 0);
+		has_positive = pos && !ebitmap_is_empty(pos);
+		has_negative = neg && !ebitmap_is_empty(neg);
 	} else {
 		kind = "role";
 		val_to_name = pdb->p_role_val_to_name;
@@ -832,7 +838,7 @@ static int cil_print_attr_strs(int indent, struct policydb *pdb, int is_type, vo
 		pos = &rs->roles;
 		neg = NULL;
 		flags = rs->flags;
-		has_positive = pos && (ebitmap_length(pos) > 0);
+		has_positive = pos && !ebitmap_is_empty(pos);
 		has_negative = 0;
 	}
 
@@ -854,10 +860,7 @@ static int cil_print_attr_strs(int indent, struct policydb *pdb, int is_type, vo
 
 	if (has_positive) {
 		cil_printf("(");
-		ebitmap_for_each_bit(pos, node, i) {
-			if (!ebitmap_get_bit(pos, i)) {
-				continue;
-			}
+		ebitmap_for_each_positive_bit(pos, node, i) {
 			cil_printf("%s ", val_to_name[i]);
 		}
 		cil_printf(") ");
@@ -866,10 +869,7 @@ static int cil_print_attr_strs(int indent, struct policydb *pdb, int is_type, vo
 	if (has_negative) {
 		cil_printf("(not (");
 
-		ebitmap_for_each_bit(neg, node, i) {
-			if (!ebitmap_get_bit(neg, i)) {
-				continue;
-			}
+		ebitmap_for_each_positive_bit(neg, node, i) {
 			cil_printf("%s ", val_to_name[i]);
 		}
 
@@ -991,15 +991,19 @@ static int ebitmap_to_names(struct ebitmap *map, char **vals_to_names, char ***n
 	char **name_arr;
 
 	num = 0;
-	ebitmap_for_each_bit(map, node, i) {
-		if (ebitmap_get_bit(map, i)) {
-			if (num >= UINT32_MAX / sizeof(*name_arr)) {
-				log_err("Overflow");
-				rc = -1;
-				goto exit;
-			}
-			num++;
+	ebitmap_for_each_positive_bit(map, node, i) {
+		if (num >= UINT32_MAX / sizeof(*name_arr)) {
+			log_err("Overflow");
+			rc = -1;
+			goto exit;
 		}
+		num++;
+	}
+
+	if (!num) {
+		*names = NULL;
+		*num_names = 0;
+		goto exit;
 	}
 
 	name_arr = malloc(sizeof(*name_arr) * num);
@@ -1010,11 +1014,9 @@ static int ebitmap_to_names(struct ebitmap *map, char **vals_to_names, char ***n
 	}
 
 	num = 0;
-	ebitmap_for_each_bit(map, node, i) {
-		if (ebitmap_get_bit(map, i)) {
-			name_arr[num] = vals_to_names[i];
-			num++;
-		}
+	ebitmap_for_each_positive_bit(map, node, i) {
+		name_arr[num] = vals_to_names[i];
+		num++;
 	}
 
 	*names = name_arr;
@@ -1054,7 +1056,7 @@ static int process_typeset(struct policydb *pdb, struct type_set *ts, struct lis
 	*names = NULL;
 	*num_names = 0;
 
-	if (ebitmap_length(&ts->negset) > 0 || ts->flags != 0) {
+	if (!ebitmap_is_empty(&ts->negset) || ts->flags != 0) {
 		rc = set_to_names(pdb, 1, ts, attr_list, names, num_names);
 		if (rc != 0) {
 			goto exit;
@@ -1092,7 +1094,6 @@ static int roletype_role_in_ancestor_to_cil(struct policydb *pdb, struct stack *
 		goto exit;
 	}
 
-	curr = role_list->head;
 	for (curr = role_list->head; curr != NULL; curr = curr->next) {
 		role_node = curr->data;
 		if (!is_id_in_ancestor_scope(pdb, decl_stack, role_node->role_name, SYM_ROLES)) {
@@ -1284,7 +1285,6 @@ static int cond_expr_to_cil(int indent, struct policydb *pdb, struct cond_expr *
 				rc = -1;
 				goto exit;
 			}
-			num_params = 0;
 		} else {
 			switch(curr->expr_type) {
 			case COND_NOT:	op = "not";	break;
@@ -1323,7 +1323,7 @@ static int cond_expr_to_cil(int indent, struct policydb *pdb, struct cond_expr *
 
 			// length = length of parameters +
 			//          length of operator +
-			//          1 space preceeding each parameter +
+			//          1 space preceding each parameter +
 			//          2 parens around the whole expression
 			//          + null terminator
 			len = strlen(val1) + strlen(val2) + strlen(op) + (num_params * 1) + 2 + 1;
@@ -1457,10 +1457,7 @@ static int role_trans_to_cil(int indent, struct policydb *pdb, struct role_trans
 
 		for (role = 0; role < num_role_names; role++) {
 			for (type = 0; type < num_type_names; type++) {
-				ebitmap_for_each_bit(&rule->classes, node, i) {
-					if (!ebitmap_get_bit(&rule->classes, i)) {
-						continue;
-					}
+				ebitmap_for_each_positive_bit(&rule->classes, node, i) {
 					cil_println(indent, "(roletransition %s %s %s %s)",
 						    role_names[role], type_names[type],
 						    pdb->p_class_val_to_name[i],
@@ -1556,11 +1553,7 @@ static int range_trans_to_cil(int indent, struct policydb *pdb, struct range_tra
 
 		for (stype = 0; stype < num_stypes; stype++) {
 			for (ttype = 0; ttype < num_ttypes; ttype++) {
-				ebitmap_for_each_bit(&rule->tclasses, node, i) {
-					if (!ebitmap_get_bit(&rule->tclasses, i)) {
-						continue;
-					}
-
+				ebitmap_for_each_positive_bit(&rule->tclasses, node, i) {
 					cil_indent(indent);
 					cil_printf("(rangetransition %s %s %s ", stypes[stype], ttypes[ttype], pdb->p_class_val_to_name[i]);
 
@@ -1752,7 +1745,7 @@ static int constraint_expr_to_string(struct policydb *pdb, struct constraint_exp
 			case CEXPR_ROLE:                 attr1 = "r1"; attr2 = "r2"; break;
 			case CEXPR_ROLE | CEXPR_TARGET:  attr1 = "r2"; attr2 = "";   break;
 			case CEXPR_ROLE | CEXPR_XTARGET: attr1 = "r3"; attr2 = "";   break;
-			case CEXPR_TYPE:                 attr1 = "t1"; attr2 = "";   break;
+			case CEXPR_TYPE:                 attr1 = "t1"; attr2 = "t2"; break;
 			case CEXPR_TYPE | CEXPR_TARGET:  attr1 = "t2"; attr2 = "";   break;
 			case CEXPR_TYPE | CEXPR_XTARGET: attr1 = "t3"; attr2 = "";   break;
 			case CEXPR_L1L2:                 attr1 = "l1"; attr2 = "l2"; break;
@@ -1824,8 +1817,6 @@ static int constraint_expr_to_string(struct policydb *pdb, struct constraint_exp
 				free(names);
 				names = NULL;
 			}
-
-			num_params = 0;
 		} else {
 			switch (expr->expr_type) {
 			case CEXPR_NOT: op = "not"; break;
@@ -1862,7 +1853,7 @@ static int constraint_expr_to_string(struct policydb *pdb, struct constraint_exp
 
 			// length = length of parameters +
 			//          length of operator +
-			//          1 space preceeding each parameter +
+			//          1 space preceding each parameter +
 			//          2 parens around the whole expression
 			//          + null terminator
 			len = strlen(val1) + strlen(val2) + strlen(op) + (num_params * 1) + 2 + 1;
@@ -2042,6 +2033,7 @@ static int class_to_cil(int indent, struct policydb *pdb, struct avrule_block *U
 		case DEFAULT_TARGET_LOW:		dflt = "target low";	break;
 		case DEFAULT_TARGET_HIGH:		dflt = "target high";	break;
 		case DEFAULT_TARGET_LOW_HIGH:	dflt = "target low-high";	break;
+		case DEFAULT_GLBLUB:		dflt = "glblub";		break;
 		default:
 			log_err("Unknown default range value: %i", class->default_range);
 			rc = -1;
@@ -2077,17 +2069,14 @@ static int class_order_to_cil(int indent, struct policydb *pdb, struct ebitmap o
 	struct ebitmap_node *node;
 	uint32_t i;
 
-	if (ebitmap_cardinality(&order) == 0) {
+	if (ebitmap_is_empty(&order)) {
 		return 0;
 	}
 
 	cil_indent(indent);
 	cil_printf("(classorder (");
 
-	ebitmap_for_each_bit(&order, node, i) {
-		if (!ebitmap_get_bit(&order, i)) {
-			continue;
-		}
+	ebitmap_for_each_positive_bit(&order, node, i) {
 		cil_printf("%s ", pdb->sym_val_to_name[SYM_CLASSES][i]);
 	}
 
@@ -2186,13 +2175,10 @@ static int role_to_cil(int indent, struct policydb *pdb, struct avrule_block *UN
 			cil_println(indent, "(roleattribute %s)", key);
 		}
 
-		if (ebitmap_cardinality(&role->roles) > 0) {
+		if (!ebitmap_is_empty(&role->roles)) {
 			cil_indent(indent);
 			cil_printf("(roleattributeset %s (", key);
-			ebitmap_for_each_bit(&role->roles, node, i) {
-				if (!ebitmap_get_bit(&role->roles, i)) {
-					continue;
-				}
+			ebitmap_for_each_positive_bit(&role->roles, node, i) {
 				cil_printf("%s ", pdb->p_role_val_to_name[i]);
 			}
 			cil_printf("))\n");
@@ -2283,7 +2269,7 @@ static int type_to_cil(int indent, struct policydb *pdb, struct avrule_block *UN
 			cil_printf(")\n");
 		}
 
-		if (ebitmap_cardinality(&type->types) > 0) {
+		if (!ebitmap_is_empty(&type->types)) {
 			cil_indent(indent);
 			cil_printf("(typeattributeset %s (", key);
 			ebitmap_to_cil(pdb, &type->types, SYM_TYPES);
@@ -2321,10 +2307,7 @@ static int user_to_cil(int indent, struct policydb *pdb, struct avrule_block *bl
 		cil_println(indent, "(userrole %s " DEFAULT_OBJECT ")", key);
 	}
 
-	ebitmap_for_each_bit(&roles, node, i) {
-		if (!ebitmap_get_bit(&roles, i)) {
-			continue;
-		}
+	ebitmap_for_each_positive_bit(&roles, node, i) {
 		cil_println(indent, "(userrole %s %s)", key, pdb->p_role_val_to_name[i]);
 	}
 
@@ -2389,7 +2372,7 @@ static int sens_to_cil(int indent, struct policydb *pdb, struct avrule_block *UN
 		}
 	}
 
-	if (ebitmap_cardinality(&level->level->cat) > 0) {
+	if (!ebitmap_is_empty(&level->level->cat)) {
 		cil_indent(indent);
 		cil_printf("(sensitivitycategory %s (", key);
 		ebitmap_to_cil(pdb, &level->level->cat, SYM_CATS);
@@ -2404,17 +2387,14 @@ static int sens_order_to_cil(int indent, struct policydb *pdb, struct ebitmap or
 	struct ebitmap_node *node;
 	uint32_t i;
 
-	if (ebitmap_cardinality(&order) == 0) {
+	if (ebitmap_is_empty(&order)) {
 		return 0;
 	}
 
 	cil_indent(indent);
 	cil_printf("(sensitivityorder (");
 
-	ebitmap_for_each_bit(&order, node, i) {
-		if (!ebitmap_get_bit(&order, i)) {
-			continue;
-		}
+	ebitmap_for_each_positive_bit(&order, node, i) {
 		cil_printf("%s ", pdb->p_sens_val_to_name[i]);
 	}
 
@@ -2447,7 +2427,7 @@ static int cat_order_to_cil(int indent, struct policydb *pdb, struct ebitmap ord
 	struct ebitmap_node *node;
 	uint32_t i;
 
-	if (ebitmap_cardinality(&order) == 0) {
+	if (ebitmap_is_empty(&order)) {
 		rc = 0;
 		goto exit;
 	}
@@ -2455,10 +2435,7 @@ static int cat_order_to_cil(int indent, struct policydb *pdb, struct ebitmap ord
 	cil_indent(indent);
 	cil_printf("(categoryorder (");
 
-	ebitmap_for_each_bit(&order, node, i) {
-		if (!ebitmap_get_bit(&order, i)) {
-			continue;
-		}
+	ebitmap_for_each_positive_bit(&order, node, i) {
 		cil_printf("%s ", pdb->p_cat_val_to_name[i]);
 	}
 
@@ -2479,10 +2456,7 @@ static int polcaps_to_cil(struct policydb *pdb)
 
 	map = &pdb->policycaps;
 
-	ebitmap_for_each_bit(map, node, i) {
-		if (!ebitmap_get_bit(map, i)) {
-			continue;
-		}
+	ebitmap_for_each_positive_bit(map, node, i) {
 		name = sepol_polcap_getname(i);
 		if (name == NULL) {
 			log_err("Unknown policy capability id: %i", i);
@@ -2504,7 +2478,7 @@ static int level_to_cil(struct policydb *pdb, struct mls_level *level)
 
 	cil_printf("(%s", pdb->p_sens_val_to_name[level->sens - 1]);
 
-	if (ebitmap_cardinality(map) > 0) {
+	if (!ebitmap_is_empty(map)) {
 		cil_printf("(");
 		ebitmap_to_cil(pdb, map, SYM_CATS);
 		cil_printf(")");
@@ -2537,23 +2511,34 @@ static int context_to_cil(struct policydb *pdb, struct context_struct *con)
 	return 0;
 }
 
-static int ocontext_isid_to_cil(struct policydb *pdb, const char **sid_to_string, struct ocontext *isids)
+static int ocontext_isid_to_cil(struct policydb *pdb, const char *const *sid_to_string,
+				unsigned num_sids, struct ocontext *isids)
 {
 	int rc = -1;
 
 	struct ocontext *isid;
 
 	struct sid_item {
-		const char *sid_key;
+		char *sid_key;
 		struct sid_item *next;
 	};
 
 	struct sid_item *head = NULL;
 	struct sid_item *item = NULL;
+	char *sid;
+	char unknown[18];
+	unsigned i;
 
 	for (isid = isids; isid != NULL; isid = isid->next) {
-		cil_println(0, "(sid %s)", sid_to_string[isid->sid[0]]);
-		cil_printf("(sidcontext %s ", sid_to_string[isid->sid[0]]);
+		i = isid->sid[0];
+		if (i < num_sids) {
+			sid = (char*)sid_to_string[i];
+		} else {
+			snprintf(unknown, 18, "%s%u", "UNKNOWN", i);
+			sid = unknown;
+		}
+		cil_println(0, "(sid %s)", sid);
+		cil_printf("(sidcontext %s ", sid);
 		context_to_cil(pdb, &isid->context[0]);
 		cil_printf(")\n");
 
@@ -2565,7 +2550,7 @@ static int ocontext_isid_to_cil(struct policydb *pdb, const char **sid_to_string
 			rc = -1;
 			goto exit;
 		}
-		item->sid_key = sid_to_string[isid->sid[0]];
+		item->sid_key = strdup(sid);
 		item->next = head;
 		head = item;
 	}
@@ -2584,6 +2569,7 @@ exit:
 	while(head) {
 		item = head;
 		head = item->next;
+		free(item->sid_key);
 		free(item);
 	}
 	return rc;
@@ -2593,41 +2579,7 @@ static int ocontext_selinux_isid_to_cil(struct policydb *pdb, struct ocontext *i
 {
 	int rc = -1;
 
-	// initial sid names aren't actually stored in the pp files, need to a have
-	// a mapping, taken from the linux kernel
-	static const char *selinux_sid_to_string[] = {
-		"null",
-		"kernel",
-		"security",
-		"unlabeled",
-		"fs",
-		"file",
-		"file_labels",
-		"init",
-		"any_socket",
-		"port",
-		"netif",
-		"netmsg",
-		"node",
-		"igmp_packet",
-		"icmp_socket",
-		"tcp_socket",
-		"sysctl_modprobe",
-		"sysctl",
-		"sysctl_fs",
-		"sysctl_kernel",
-		"sysctl_net",
-		"sysctl_net_unix",
-		"sysctl_vm",
-		"sysctl_dev",
-		"kmod",
-		"policy",
-		"scmp_packet",
-		"devnull",
-		NULL
-	};
-
-	rc = ocontext_isid_to_cil(pdb, selinux_sid_to_string, isids);
+	rc = ocontext_isid_to_cil(pdb, selinux_sid_to_str, SELINUX_SID_SZ, isids);
 	if (rc != 0) {
 		goto exit;
 	}
@@ -2856,24 +2808,7 @@ static int ocontext_xen_isid_to_cil(struct policydb *pdb, struct ocontext *isids
 {
 	int rc = -1;
 
-	// initial sid names aren't actually stored in the pp files, need to a have
-	// a mapping, taken from the xen kernel
-	static const char *xen_sid_to_string[] = {
-		"null",
-		"xen",
-		"dom0",
-		"domio",
-		"domxen",
-		"unlabeled",
-		"security",
-		"ioport",
-		"iomem",
-		"irq",
-		"device",
-		NULL,
-	};
-
-	rc = ocontext_isid_to_cil(pdb, xen_sid_to_string, isids);
+	rc = ocontext_isid_to_cil(pdb, xen_sid_to_str, XEN_SID_SZ, isids);
 	if (rc != 0) {
 		goto exit;
 	}
@@ -3456,10 +3391,7 @@ static int declared_scopes_to_cil(int indent, struct policydb *pdb, struct avrul
 		}
 
 		map = decl->declared.scope[sym];
-		ebitmap_for_each_bit(&map, node, i) {
-			if (!ebitmap_get_bit(&map, i)) {
-				continue;
-			}
+		ebitmap_for_each_positive_bit(&map, node, i) {
 			key = pdb->sym_val_to_name[sym][i];
 			datum = hashtab_search(pdb->symtab[sym].table, key);
 			if (datum == NULL) {
@@ -3523,10 +3455,7 @@ static int required_scopes_to_cil(int indent, struct policydb *pdb, struct avrul
 		}
 
 		map = decl->required.scope[sym];
-		ebitmap_for_each_bit(&map, node, i) {
-			if (!ebitmap_get_bit(&map, i)) {
-				continue;
-			}
+		ebitmap_for_each_positive_bit(&map, node, i) {
 			key = pdb->sym_val_to_name[sym][i];
 
 			scope_datum = hashtab_search(pdb->scope[sym].table, key);
@@ -4223,7 +4152,6 @@ exit:
 int sepol_ppfile_to_module_package(FILE *fp, struct sepol_module_package **mod_pkg)
 {
 	int rc = -1;
-	FILE *f = NULL;
 	struct sepol_policy_file *pf = NULL;
 	struct sepol_module_package *pkg = NULL;
 	char *data = NULL;
@@ -4275,9 +4203,6 @@ exit:
 	free(data);
 
 	sepol_policy_file_free(pf);
-	if (f != NULL) {
-		fclose(f);
-	}
 
 	if (rc != 0) {
 		sepol_module_package_free(pkg);
