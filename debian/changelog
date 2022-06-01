@@ -1,3 +1,59 @@
+libsepol (3.1-1) unstable; urgency=medium
+
+  * New upstream release
+  * debian/rules: Add -fno-semantic-interposition to the CFLAGS
+    (Closes: #961329)
+
+ -- Laurent Bigonville <bigon@debian.org>  Tue, 14 Jul 2020 15:44:40 +0200
+
+libsepol (3.1~rc1-1) experimental; urgency=medium
+
+  [ Debian Janitor ]
+  * Trim trailing whitespace.
+  * Set debhelper-compat version in Build-Depends.
+  * Set upstream metadata fields: Bug-Database, Repository, Repository-
+    Browse.
+  * Set upstream metadata fields: Bug-Submit.
+
+  [ Laurent Bigonville ]
+  * New upstream version 3.1~rc1 (Closes: #955286, #955154)
+  * debian/gitlab-ci.yml: Add salsa CI
+  * debian/control: Set Rules-Requires-Root: no
+  * debian/rules: Do not override CC when cross-compiling, debhelper is
+    already doing that for us.
+
+  [ Debian Janitor ]
+  * Wrap long lines in changelog entries: 1.12.24-1, 1.8-1.
+  * Update standards version to 4.5.0, no changes needed.
+
+ -- Laurent Bigonville <bigon@debian.org>  Sat, 23 May 2020 10:30:39 +0200
+
+libsepol (3.0-1) unstable; urgency=medium
+
+  * New upstream release
+    - debian/libsepol1.symbols: Add newly exported symbols
+  * debian/control: Bump Standards-Version to 4.4.1 (no further changes)
+  * Bump debhelper compatibility to 12, remove override for dh_missing
+  * debian/control: Drop explicit build-dep against dpkg-dev (>= 1.16.0), that
+    version is available for age
+
+ -- Laurent Bigonville <bigon@debian.org>  Tue, 10 Dec 2019 15:47:14 +0100
+
+libsepol (2.9-2) unstable; urgency=medium
+
+  * Upload to unstable
+
+ -- Laurent Bigonville <bigon@debian.org>  Sat, 06 Jul 2019 17:57:55 +0200
+
+libsepol (2.9-1) experimental; urgency=medium
+
+  * New upstream release
+  * debian/watch: Adjust the URL
+  * debian/control: Bump Standards-Version to 4.3.0 (no further changes)
+  * debian/sepol-utils.install: Install manpages in Russian
+
+ -- Laurent Bigonville <bigon@debian.org>  Sun, 17 Mar 2019 19:09:02 +0100
+
 libsepol (2.8-1pexip2) pexip; urgency=medium
 
   * Rebuild in buster environment
@@ -277,13 +333,13 @@ libsepol (2.0.40-1) unstable; urgency=low
 libsepol (2.0.39-1) unstable; urgency=low
 
   * New upstream point release. Adds support for building Xen policies
-    from Paul Nuzzi. 
+    from Paul Nuzzi.
 
  -- Manoj Srivastava <srivasta@debian.org>  Thu, 15 Oct 2009 22:53:54 -0500
 
 libsepol (2.0.38-2) unstable; urgency=high
 
-  * Handle the init=/bin/sh case in postinst    
+  * Handle the init=/bin/sh case in postinst
     The previous tests did not check to see if the process running with
     process id 1 was actually /sbin/init, or if /dev/initctl was present to
     be talked to.
@@ -531,8 +587,8 @@ libsepol (1.12.24-1) unstable; urgency=low
     * Merged helpful hierarchy check errors patch from Joshua Brindle.
     * Merged semodule_deps patch from Karl MacMillan.
       This adds source module names to the avrule decls.
-  * Bug fix: "libsepol1: Should run "telinit u" in postinst
-    script", thanks to Piotr Kaczuba                            (Closes: #382020).
+  * Bug fix: "libsepol1: Should run "telinit u" in postinst script", thanks to
+    Piotr Kaczuba                            (Closes: #382020).
 
  -- Manoj Srivastava <srivasta@debian.org>  Wed,  9 Aug 2006 11:48:50 -0500
 
@@ -798,7 +854,7 @@ libsepol (1.8-1) unstable; urgency=low
       * Merged genbools debugging message cleanup from Red Hat.
       * Merged loadable module support from Tresys Technology.
   * libsepol1: Priority should be required, thanks to Matt Kraai.
-                                                                      (Closes: 328041)
+    (Closes: 328041)
 
  -- Manoj Srivastava <srivasta@debian.org>  Wed, 14 Sep 2005 15:36:54 -0500
 
@@ -894,4 +950,3 @@ libsepol (1.0-1) unstable; urgency=low
   * Initial Release.
 
  -- Russell Coker <russell@coker.com.au>  Fri, 20 Aug 2004 18:14:00 +1000
-

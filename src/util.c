@@ -27,7 +27,6 @@
 #include <sepol/policydb/flask_types.h>
 #include <sepol/policydb/policydb.h>
 #include <sepol/policydb/util.h>
-#include <dso.h>
 
 struct val_to_name {
 	unsigned int val;
@@ -159,16 +158,16 @@ char *sepol_extended_perms_to_string(avtab_extended_perms_t *xperms)
 
 		if (xperms->specified & AVTAB_XPERMS_IOCTLFUNCTION) {
 			value = xperms->driver<<8 | bit;
-			low_value = xperms->driver<<8 | low_bit;
 			if (in_range) {
+				low_value = xperms->driver<<8 | low_bit;
 				len = snprintf(p, sizeof(xpermsbuf) - xpermslen, "0x%hx-0x%hx ", low_value, value);
 			} else {
 				len = snprintf(p, sizeof(xpermsbuf) - xpermslen, "0x%hx ", value);
 			}
 		} else if (xperms->specified & AVTAB_XPERMS_IOCTLDRIVER) {
 			value = bit << 8;
-			low_value = low_bit << 8;
 			if (in_range) {
+				low_value = low_bit << 8;
 				len = snprintf(p, sizeof(xpermsbuf) - xpermslen, "0x%hx-0x%hx ", low_value, (uint16_t) (value|0xff));
 			} else {
 				len = snprintf(p, sizeof(xpermsbuf) - xpermslen, "0x%hx-0x%hx ", value, (uint16_t) (value|0xff));
@@ -250,7 +249,7 @@ static inline int tokenize_str(char delim, char **str, char **ptr, size_t *len)
  * contain the remaining content of line_buf. If the delimiter is any whitespace
  * character, then all whitespace will be squashed.
  */
-int hidden tokenize(char *line_buf, char delim, int num_args, ...)
+int tokenize(char *line_buf, char delim, int num_args, ...)
 {
 	char **arg, *buf_p;
 	int rc, items;

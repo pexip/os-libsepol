@@ -6,9 +6,10 @@ Section: libs
 Maintainer: Pexip AS <packaging@pexip.com>
 XSBC-Pexip-Original-Maintainer: Debian SELinux maintainers <selinux-devel@lists.alioth.debian.org>
 XSBC-Pexip-Original-Uploaders: Laurent Bigonville <bigon@debian.org>, Russell Coker <russell@coker.com.au>
-Standards-Version: 4.1.4
-Build-Depends: debhelper (>= 10), dpkg-dev (>= 1.16.0), file, flex
+Standards-Version: 4.5.0
+Build-Depends: debhelper-compat (= 12), file, flex
 Homepage: http://userspace.selinuxproject.org/
+Rules-Requires-Root: no
 XS-Pexip-Upstream: http://deb.debian.org/debian/ bullseye
 
 Package: sepol-utils

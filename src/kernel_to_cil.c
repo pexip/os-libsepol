@@ -18,7 +18,6 @@
 
 #include <sepol/policydb/avtab.h>
 #include <sepol/policydb/conditional.h>
-#include <sepol/policydb/flask.h>
 #include <sepol/policydb/hashtab.h>
 #include <sepol/policydb/polcaps.h>
 #include <sepol/policydb/policydb.h>
@@ -36,7 +35,7 @@ static char *cond_expr_to_str(struct policydb *pdb, struct cond_expr *expr)
 	char *str = NULL;
 	int rc;
 
-	rc = stack_init(&stack);
+	rc = strs_stack_init(&stack);
 	if (rc != 0) {
 		goto exit;
 	}
@@ -65,13 +64,13 @@ static char *cond_expr_to_str(struct policydb *pdb, struct cond_expr *expr)
 			}
 
 			if (num_params == 2) {
-				val2 = stack_pop(stack);
+				val2 = strs_stack_pop(stack);
 				if (!val2) {
 					sepol_log_err("Invalid conditional expression");
 					goto exit;
 				}
 			}
-			val1 = stack_pop(stack);
+			val1 = strs_stack_pop(stack);
 			if (!val1) {
 				sepol_log_err("Invalid conditional expression");
 				free(val2);
@@ -89,29 +88,31 @@ static char *cond_expr_to_str(struct policydb *pdb, struct cond_expr *expr)
 			sepol_log_err("Invalid conditional expression");
 			goto exit;
 		}
-		rc = stack_push(stack, new_val);
+		rc = strs_stack_push(stack, new_val);
 		if (rc != 0) {
 			sepol_log_err("Out of memory");
 			goto exit;
 		}
 	}
 
-	new_val = stack_pop(stack);
-	if (!new_val || !stack_empty(stack)) {
+	new_val = strs_stack_pop(stack);
+	if (!new_val || !strs_stack_empty(stack)) {
 		sepol_log_err("Invalid conditional expression");
 		goto exit;
 	}
 
 	str = new_val;
 
-	stack_destroy(&stack);
+	strs_stack_destroy(&stack);
 	return str;
 
 exit:
-	while ((new_val = stack_pop(stack)) != NULL) {
-		free(new_val);
+	if (stack) {
+		while ((new_val = strs_stack_pop(stack)) != NULL) {
+			free(new_val);
+		}
+		strs_stack_destroy(&stack);
 	}
-	stack_destroy(&stack);
 
 	return NULL;
 }
@@ -127,7 +128,7 @@ static char *constraint_expr_to_str(struct policydb *pdb, struct constraint_expr
 
 	*use_mls = 0;
 
-	rc = stack_init(&stack);
+	rc = strs_stack_init(&stack);
 	if (rc != 0) {
 		goto exit;
 	}
@@ -208,13 +209,13 @@ static char *constraint_expr_to_str(struct policydb *pdb, struct constraint_expr
 			}
 
 			if (num_params == 2) {
-				val2 = stack_pop(stack);
+				val2 = strs_stack_pop(stack);
 				if (!val2) {
 					sepol_log_err("Invalid constraint expression");
 					goto exit;
 				}
 			}
-			val1 = stack_pop(stack);
+			val1 = strs_stack_pop(stack);
 			if (!val1) {
 				sepol_log_err("Invalid constraint expression");
 				goto exit;
@@ -231,30 +232,32 @@ static char *constraint_expr_to_str(struct policydb *pdb, struct constraint_expr
 		if (!new_val) {
 			goto exit;
 		}
-		rc = stack_push(stack, new_val);
+		rc = strs_stack_push(stack, new_val);
 		if (rc != 0) {
 			sepol_log_err("Out of memory");
 			goto exit;
 		}
 	}
 
-	new_val = stack_pop(stack);
-	if (!new_val || !stack_empty(stack)) {
+	new_val = strs_stack_pop(stack);
+	if (!new_val || !strs_stack_empty(stack)) {
 		sepol_log_err("Invalid constraint expression");
 		goto exit;
 	}
 
 	str = new_val;
 
-	stack_destroy(&stack);
+	strs_stack_destroy(&stack);
 
 	return str;
 
 exit:
-	while ((new_val = stack_pop(stack)) != NULL) {
-		free(new_val);
+	if (stack) {
+		while ((new_val = strs_stack_pop(stack)) != NULL) {
+			free(new_val);
+		}
+		strs_stack_destroy(&stack);
 	}
-	stack_destroy(&stack);
 
 	return NULL;
 }
@@ -529,23 +532,31 @@ exit:
 	return rc;
 }
 
-static int write_sids_to_cil(FILE *out, const char *const *sid_to_str, struct ocontext *isids)
+static int write_sids_to_cil(FILE *out, const char *const *sid_to_str,
+			     unsigned num_sids, struct ocontext *isids)
 {
 	struct ocontext *isid;
 	struct strs *strs;
 	char *sid;
 	char *prev;
+	char unknown[18];
 	unsigned i;
 	int rc;
 
-	rc = strs_init(&strs, SECINITSID_NUM+1);
+	rc = strs_init(&strs, num_sids+1);
 	if (rc != 0) {
 		goto exit;
 	}
 
 	for (isid = isids; isid != NULL; isid = isid->next) {
 		i = isid->sid[0];
-		rc = strs_add_at_index(strs, (char *)sid_to_str[i], i);
+		if (i < num_sids) {
+			sid = (char *)sid_to_str[i];
+		} else {
+			snprintf(unknown, 18, "%s%u", "UNKNOWN", i);
+			sid = strdup(unknown);
+		}
+		rc = strs_add_at_index(strs, sid, i);
 		if (rc != 0) {
 			goto exit;
 		}
@@ -577,6 +588,10 @@ static int write_sids_to_cil(FILE *out, const char *const *sid_to_str, struct oc
 	sepol_printf(out, "))\n");
 
 exit:
+	for (i=num_sids; i<strs_num_items(strs); i++) {
+		sid = strs_read_at_index(strs, i);
+		free(sid);
+	}
 	strs_destroy(&strs);
 	if (rc != 0) {
 		sepol_log_err("Error writing sid rules to CIL\n");
@@ -590,9 +605,11 @@ static int write_sid_decl_rules_to_cil(FILE *out, struct policydb *pdb)
 	int rc = 0;
 
 	if (pdb->target_platform == SEPOL_TARGET_SELINUX) {
-		rc = write_sids_to_cil(out, selinux_sid_to_str, pdb->ocontexts[0]);
+		rc = write_sids_to_cil(out, selinux_sid_to_str, SELINUX_SID_SZ,
+				       pdb->ocontexts[0]);
 	} else if (pdb->target_platform == SEPOL_TARGET_XEN) {
-		rc = write_sids_to_cil(out, xen_sid_to_str, pdb->ocontexts[0]);
+		rc = write_sids_to_cil(out, xen_sid_to_str, XEN_SID_SZ,
+				       pdb->ocontexts[0]);
 	} else {
 		sepol_log_err("Unknown target platform: %i", pdb->target_platform);
 		rc = -1;
@@ -684,6 +701,9 @@ static int write_default_range_to_cil(FILE *out, char *class_name, class_datum_t
 	case DEFAULT_TARGET_LOW_HIGH:
 		dft = "target low-high";
 		break;
+	case DEFAULT_GLBLUB:
+		dft = "glblub";
+		break;
 	default:
 		sepol_log_err("Unknown default type value: %i", class->default_range);
 		return -1;
@@ -757,9 +777,20 @@ exit:
 
 static void write_default_mls_level(FILE *out)
 {
-	sepol_printf(out, "(sensitivity s0)");
-	sepol_printf(out, "(sensitivityorder (s0))");
-	sepol_printf(out, "(level %s (s0))", DEFAULT_LEVEL);
+	sepol_printf(out, "(sensitivity s0)\n");
+	sepol_printf(out, "(sensitivityorder (s0))\n");
+	sepol_printf(out, "(level %s (s0))\n", DEFAULT_LEVEL);
+}
+
+static int map_count_sensitivity_aliases(__attribute__((unused)) char *key, void *data, void *args)
+{
+	level_datum_t *sens = data;
+	unsigned *count = args;
+
+	if (sens->isalias)
+		(*count)++;
+
+	return SEPOL_OK;
 }
 
 static int map_sensitivity_aliases_to_strs(char *key, void *data, void *args)
@@ -779,26 +810,13 @@ static int write_sensitivity_rules_to_cil(FILE *out, struct policydb *pdb)
 {
 	level_datum_t *level;
 	char *prev, *name, *actual;
-	struct strs *strs;
-	unsigned i, num;
+	struct strs *strs = NULL;
+	unsigned i, num = 0;
 	int rc = 0;
-
-	rc = strs_init(&strs, pdb->p_levels.nprim);
-	if (rc != 0) {
-		goto exit;
-	}
 
 	/* sensitivities */
 	for (i=0; i < pdb->p_levels.nprim; i++) {
 		name = pdb->p_sens_val_to_name[i];
-		if (!name) continue;
-		level = hashtab_search(pdb->p_levels.table, name);
-		if (!level) {
-			rc = -1;
-			goto exit;
-		}
-		if (level->isalias) continue;
-
 		sepol_printf(out, "(sensitivity %s)\n", name);
 	}
 
@@ -807,14 +825,6 @@ static int write_sensitivity_rules_to_cil(FILE *out, struct policydb *pdb)
 	prev = NULL;
 	for (i=0; i < pdb->p_levels.nprim; i++) {
 		name = pdb->p_sens_val_to_name[i];
-		if (!name) continue;
-		level = hashtab_search(pdb->p_levels.table, name);
-		if (!level) {
-			rc = -1;
-			goto exit;
-		}
-		if (level->isalias) continue;
-
 		if (prev) {
 			sepol_printf(out, "%s ", prev);
 		}
@@ -825,6 +835,22 @@ static int write_sensitivity_rules_to_cil(FILE *out, struct policydb *pdb)
 	}
 	sepol_printf(out, "))\n");
 
+	rc = hashtab_map(pdb->p_levels.table, map_count_sensitivity_aliases, &num);
+	if (rc != 0) {
+		goto exit;
+	}
+
+	if (num == 0) {
+		/* No aliases, so skip sensitivity alias rules */
+		rc = 0;
+		goto exit;
+	}
+
+	rc = strs_init(&strs, num);
+	if (rc != 0) {
+		goto exit;
+	}
+
 	rc = hashtab_map(pdb->p_levels.table, map_sensitivity_aliases_to_strs, strs);
 	if (rc != 0) {
 		goto exit;
@@ -832,16 +858,9 @@ static int write_sensitivity_rules_to_cil(FILE *out, struct policydb *pdb)
 
 	strs_sort(strs);
 
-	num = strs_num_items(strs);
-
 	/* sensitivity aliases */
 	for (i=0; i < num; i++) {
 		name = strs_read_at_index(strs, i);
-		level = hashtab_search(pdb->p_levels.table, name);
-		if (!level) {
-			rc = -1;
-			goto exit;
-		}
 		sepol_printf(out, "(sensitivityalias %s)\n", name);
 	}
 
@@ -867,6 +886,17 @@ exit:
 	return rc;
 }
 
+static int map_count_category_aliases(__attribute__((unused)) char *key, void *data, void *args)
+{
+	cat_datum_t *cat = data;
+	unsigned *count = args;
+
+	if (cat->isalias)
+		(*count)++;
+
+	return SEPOL_OK;
+}
+
 static int map_category_aliases_to_strs(char *key, void *data, void *args)
 {
 	cat_datum_t *cat = data;
@@ -884,26 +914,13 @@ static int write_category_rules_to_cil(FILE *out, struct policydb *pdb)
 {
 	cat_datum_t *cat;
 	char *prev, *name, *actual;
-	struct strs *strs;
-	unsigned i, num;
+	struct strs *strs = NULL;
+	unsigned i, num = 0;
 	int rc = 0;
-
-	rc = strs_init(&strs, pdb->p_levels.nprim);
-	if (rc != 0) {
-		goto exit;
-	}
 
 	/* categories */
 	for (i=0; i < pdb->p_cats.nprim; i++) {
 		name = pdb->p_cat_val_to_name[i];
-		if (!name) continue;
-		cat = hashtab_search(pdb->p_cats.table, name);
-		if (!cat) {
-			rc = -1;
-			goto exit;
-		}
-		if (cat->isalias) continue;
-
 		sepol_printf(out, "(category %s)\n", name);
 	}
 
@@ -912,14 +929,6 @@ static int write_category_rules_to_cil(FILE *out, struct policydb *pdb)
 	prev = NULL;
 	for (i=0; i < pdb->p_cats.nprim; i++) {
 		name = pdb->p_cat_val_to_name[i];
-		if (!name) continue;
-		cat = hashtab_search(pdb->p_cats.table, name);
-		if (!cat) {
-			rc = -1;
-			goto exit;
-		}
-		if (cat->isalias) continue;
-
 		if (prev) {
 			sepol_printf(out, "%s ", prev);
 		}
@@ -930,6 +939,22 @@ static int write_category_rules_to_cil(FILE *out, struct policydb *pdb)
 	}
 	sepol_printf(out, "))\n");
 
+	rc = hashtab_map(pdb->p_cats.table, map_count_category_aliases, &num);
+	if (rc != 0) {
+		goto exit;
+	}
+
+	if (num == 0) {
+		/* No aliases, so skip category alias rules */
+		rc = 0;
+		goto exit;
+	}
+
+	rc = strs_init(&strs, num);
+	if (rc != 0) {
+		goto exit;
+	}
+
 	rc = hashtab_map(pdb->p_cats.table, map_category_aliases_to_strs, strs);
 	if (rc != 0) {
 		goto exit;
@@ -937,16 +962,9 @@ static int write_category_rules_to_cil(FILE *out, struct policydb *pdb)
 
 	strs_sort(strs);
 
-	num = strs_num_items(strs);
-
 	/* category aliases */
 	for (i=0; i < num; i++) {
 		name = strs_read_at_index(strs, i);
-		cat = hashtab_search(pdb->p_cats.table, name);
-		if (!cat) {
-			rc = -1;
-			goto exit;
-		}
 		sepol_printf(out, "(categoryalias %s)\n", name);
 	}
 
@@ -979,10 +997,7 @@ static size_t cats_ebitmap_len(struct ebitmap *cats, char **val_to_name)
 	size_t len = 0;
 
 	range = 0;
-	ebitmap_for_each_bit(cats, node, i) {
-		if (!ebitmap_get_bit(cats, i))
-			continue;
-
+	ebitmap_for_each_positive_bit(cats, node, i) {
 		if (range == 0)
 			start = i;
 
@@ -1030,10 +1045,7 @@ static char *cats_ebitmap_to_str(struct ebitmap *cats, char **val_to_name)
 	remaining--;;
 
 	range = 0;
-	ebitmap_for_each_bit(cats, node, i) {
-		if (!ebitmap_get_bit(cats, i))
-			continue;
-
+	ebitmap_for_each_positive_bit(cats, node, i) {
 		if (range == 0)
 			start = i;
 
@@ -1086,7 +1098,7 @@ static int write_sensitivitycategory_rules_to_cil(FILE *out, struct policydb *pd
 		}
 		if (level->isalias) continue;
 
-		if (ebitmap_cardinality(&level->level->cat) > 0) {
+		if (!ebitmap_is_empty(&level->level->cat)) {
 			cats = cats_ebitmap_to_str(&level->level->cat, pdb->p_cat_val_to_name);
 			sepol_printf(out, "(sensitivitycategory %s %s)\n", name, cats);
 			free(cats);
@@ -1150,9 +1162,7 @@ static int write_polcap_rules_to_cil(FILE *out, struct policydb *pdb)
 		goto exit;
 	}
 
-	ebitmap_for_each_bit(&pdb->policycaps, node, i) {
-		if (!ebitmap_get_bit(&pdb->policycaps, i)) continue;
-
+	ebitmap_for_each_positive_bit(&pdb->policycaps, node, i) {
 		name = sepol_polcap_getname(i);
 		if (name == NULL) {
 			sepol_log_err("Unknown policy capability id: %i", i);
@@ -1355,33 +1365,55 @@ exit:
 	return rc;
 }
 
+static int map_count_type_aliases(__attribute__((unused)) char *key, void *data, void *args)
+{
+	type_datum_t *datum = data;
+	unsigned *count = args;
+
+	if (datum->primary == 0 && datum->flavor == TYPE_TYPE)
+		(*count)++;
+
+	return SEPOL_OK;
+}
+
+static int map_type_aliases_to_strs(char *key, void *data, void *args)
+{
+	type_datum_t *datum = data;
+	struct strs *strs = args;
+	int rc = 0;
+
+	if (datum->primary == 0 && datum->flavor == TYPE_TYPE)
+		rc = strs_add(strs, key);
+
+	return rc;
+}
+
 static int write_type_alias_rules_to_cil(FILE *out, struct policydb *pdb)
 {
 	type_datum_t *alias;
 	struct strs *strs;
 	char *name;
 	char *type;
-	unsigned i, num;
+	unsigned i, num = 0;
 	int rc = 0;
 
-	rc = strs_init(&strs, pdb->p_types.nprim);
+	rc = hashtab_map(pdb->p_types.table, map_count_type_aliases, &num);
 	if (rc != 0) {
 		goto exit;
 	}
 
-	for (i=0; i < pdb->p_types.nprim; i++) {
-		alias = pdb->type_val_to_struct[i];
-		if (!alias->primary) {
-			rc = strs_add(strs, pdb->p_type_val_to_name[i]);
-			if (rc != 0) {
-				goto exit;
-			}
-		}
+	rc = strs_init(&strs, num);
+	if (rc != 0) {
+		goto exit;
+	}
+
+	rc = hashtab_map(pdb->p_types.table, map_type_aliases_to_strs, strs);
+	if (rc != 0) {
+		goto exit;
 	}
 
 	strs_sort(strs);
 
-	num = strs_num_items(strs);
 	for (i=0; i<num; i++) {
 		name = strs_read_at_index(strs, i);
 		if (!name) {
@@ -1489,7 +1521,7 @@ static int write_type_attribute_sets_to_cil(FILE *out, struct policydb *pdb)
 		if (attr->flavor != TYPE_ATTRIB) continue;
 		name = pdb->p_type_val_to_name[i];
 		typemap = &pdb->attr_type_map[i];
-		if (ebitmap_cardinality(typemap) == 0) continue;
+		if (ebitmap_is_empty(typemap)) continue;
 		types = ebitmap_to_str(typemap, pdb->p_type_val_to_name, 1);
 		if (!types) {
 			rc = -1;
@@ -1520,9 +1552,9 @@ exit:
 
 static int write_type_permissive_rules_to_cil(FILE *out, struct policydb *pdb)
 {
-	type_datum_t *type;
 	struct strs *strs;
 	char *name;
+	struct ebitmap_node *node;
 	unsigned i, num;
 	int rc = 0;
 
@@ -1531,13 +1563,10 @@ static int write_type_permissive_rules_to_cil(FILE *out, struct policydb *pdb)
 		goto exit;
 	}
 
-	for (i=0; i < pdb->p_types.nprim; i++) {
-		type = pdb->type_val_to_struct[i];
-		if (type->flavor == TYPE_TYPE && (type->flags & TYPE_FLAGS_PERMISSIVE)) {
-			rc = strs_add(strs, pdb->p_type_val_to_name[i]);
-			if (rc != 0) {
-				goto exit;
-			}
+	ebitmap_for_each_positive_bit(&pdb->permissive_map, node, i) {
+		rc = strs_add(strs, pdb->p_type_val_to_name[i-1]);
+		if (rc != 0) {
+			goto exit;
 		}
 	}
 
@@ -1602,8 +1631,8 @@ static char *xperms_to_str(avtab_extended_perms_t *xperms)
 
 		if (xperms->specified & AVTAB_XPERMS_IOCTLFUNCTION) {
 			value = xperms->driver<<8 | bit;
-			low_value = xperms->driver<<8 | low_bit;
 			if (in_range) {
+				low_value = xperms->driver<<8 | low_bit;
 				len = snprintf(p, remaining, " (range 0x%hx 0x%hx)", low_value, value);
 				in_range = 0;
 			} else {
@@ -1611,8 +1640,8 @@ static char *xperms_to_str(avtab_extended_perms_t *xperms)
 			}
 		} else if (xperms->specified & AVTAB_XPERMS_IOCTLDRIVER) {
 			value = bit << 8;
-			low_value = low_bit << 8;
 			if (in_range) {
+				low_value = low_bit << 8;
 				len = snprintf(p, remaining, " (range 0x%hx 0x%hx)", low_value, (uint16_t) (value|0xff));
 				in_range = 0;
 			} else {
@@ -1869,7 +1898,7 @@ static char *level_to_str(struct policydb *pdb, struct mls_level *level)
 	char *sens_str = pdb->p_sens_val_to_name[level->sens - 1];
 	char *cats_str;
 
-	if (ebitmap_cardinality(cats) > 0) {
+	if (!ebitmap_is_empty(cats)) {
 		cats_str = cats_ebitmap_to_str(cats, pdb->p_cat_val_to_name);
 		level_str = create_str("(%s %s)", 2, sens_str, cats_str);
 		free(cats_str);
@@ -2019,6 +2048,8 @@ static int write_cond_av_list_to_cil(FILE *out, struct policydb *pdb, cond_av_li
 	return 0;
 
 exit:
+	strs_free_all(strs);
+	strs_destroy(&strs);
 	return rc;
 }
 
@@ -2176,7 +2207,7 @@ static int write_role_decl_rules_to_cil(FILE *out, struct policydb *pdb)
 			goto exit;
 		}
 		types = &role->types.types;
-		if (types && (ebitmap_cardinality(types) > 0)) {
+		if (types && !ebitmap_is_empty(types)) {
 			rc = strs_init(&type_strs, pdb->p_types.nprim);
 			if (rc != 0) {
 				goto exit;
@@ -2361,7 +2392,7 @@ static int write_user_decl_rules_to_cil(FILE *out, struct policydb *pdb)
 		}
 
 		roles = &user->roles.roles;
-		if (roles && (ebitmap_cardinality(roles) > 0)) {
+		if (roles && !ebitmap_is_empty(roles)) {
 			rc = strs_init(&role_strs, pdb->p_roles.nprim);
 			if (rc != 0) {
 				goto exit;
@@ -2479,11 +2510,12 @@ exit:
 	return ctx;
 }
 
-static int write_sid_context_rules_to_cil(FILE *out, struct policydb *pdb, const char *const *sid_to_str)
+static int write_sid_context_rules_to_cil(FILE *out, struct policydb *pdb, const char *const *sid_to_str, unsigned num_sids)
 {
 	struct ocontext *isid;
 	struct strs *strs;
-	const char *sid;
+	char *sid;
+	char unknown[18];
 	char *ctx, *rule;
 	unsigned i;
 	int rc = -1;
@@ -2495,7 +2527,13 @@ static int write_sid_context_rules_to_cil(FILE *out, struct policydb *pdb, const
 
 	for (isid = pdb->ocontexts[0]; isid != NULL; isid = isid->next) {
 		i = isid->sid[0];
-		sid = sid_to_str[i];
+		if (i < num_sids) {
+			sid = (char *)sid_to_str[i];
+		} else {
+			snprintf(unknown, 18, "%s%u", "UNKNOWN", i);
+			sid = unknown;
+		}
+
 		ctx = context_to_str(pdb, &isid->context[0]);
 		if (!ctx) {
 			rc = -1;
@@ -2531,7 +2569,8 @@ exit:
 
 static int write_selinux_isid_rules_to_cil(FILE *out, struct policydb *pdb)
 {
-	return write_sid_context_rules_to_cil(out, pdb, selinux_sid_to_str);
+	return write_sid_context_rules_to_cil(out, pdb, selinux_sid_to_str,
+					      SELINUX_SID_SZ);
 }
 
 static int write_selinux_fsuse_rules_to_cil(FILE *out, struct policydb *pdb)
@@ -2884,7 +2923,7 @@ exit:
 
 static int write_xen_isid_rules_to_cil(FILE *out, struct policydb *pdb)
 {
-	return write_sid_context_rules_to_cil(out, pdb, xen_sid_to_str);
+	return write_sid_context_rules_to_cil(out, pdb, xen_sid_to_str, XEN_SID_SZ);
 }
 
 static int write_xen_pirq_rules_to_cil(FILE *out, struct policydb *pdb)

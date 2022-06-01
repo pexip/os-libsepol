@@ -49,8 +49,8 @@
 #include <sepol/policydb/conditional.h>
 #include <sepol/policydb/avrule_block.h>
 #include <sepol/policydb/util.h>
-#include <sepol/policydb/flask.h>
 
+#include "kernel_to_common.h"
 #include "private.h"
 #include "debug.h"
 #include "mls.h"
@@ -194,6 +194,13 @@ static struct policydb_compat_info policydb_compat[] = {
 	 .target_platform = SEPOL_TARGET_SELINUX,
 	},
 	{
+	 .type = POLICY_KERN,
+	 .version = POLICYDB_VERSION_GLBLUB,
+	 .sym_num = SYM_NUM,
+	 .ocon_num = OCON_IBENDPORT + 1,
+	 .target_platform = SEPOL_TARGET_SELINUX,
+	},
+	{
 	 .type = POLICY_BASE,
 	 .version = MOD_POLICYDB_VERSION_BASE,
 	 .sym_num = SYM_NUM,
@@ -301,6 +308,13 @@ static struct policydb_compat_info policydb_compat[] = {
 	{
 	 .type = POLICY_BASE,
 	 .version = MOD_POLICYDB_VERSION_INFINIBAND,
+	 .sym_num = SYM_NUM,
+	 .ocon_num = OCON_IBENDPORT + 1,
+	 .target_platform = SEPOL_TARGET_SELINUX,
+	},
+	{
+	 .type = POLICY_BASE,
+	 .version = MOD_POLICYDB_VERSION_GLBLUB,
 	 .sym_num = SYM_NUM,
 	 .ocon_num = OCON_IBENDPORT + 1,
 	 .target_platform = SEPOL_TARGET_SELINUX,
@@ -417,6 +431,14 @@ static struct policydb_compat_info policydb_compat[] = {
 	 .ocon_num = 0,
 	 .target_platform = SEPOL_TARGET_SELINUX,
 	},
+	{
+	 .type = POLICY_MOD,
+	 .version = MOD_POLICYDB_VERSION_GLBLUB,
+	 .sym_num = SYM_NUM,
+	 .ocon_num = 0,
+	 .target_platform = SEPOL_TARGET_SELINUX,
+	},
+
 };
 
 #if 0
@@ -1588,10 +1610,6 @@ int policydb_load_isids(policydb_t * p, sidtab_t * s)
 
 	head = p->ocontexts[OCON_ISID];
 	for (c = head; c; c = c->next) {
-		if (!c->context[0].user) {
-			ERR(NULL, "SID %s was never defined", c->u.name);
-			return -1;
-		}
 		if (sepol_sidtab_insert(s, c->sid[0], &c->context[0])) {
 			ERR(NULL, "unable to load initial SID %s", c->u.name);
 			return -1;
@@ -2539,7 +2557,7 @@ int role_trans_read(policydb_t *p, struct policy_file *fp)
 				return -1;
 			tr->tclass = le32_to_cpu(buf[0]);
 		} else
-			tr->tclass = SECCLASS_PROCESS;
+			tr->tclass = p->process_class;
 		ltr = tr;
 	}
 	return 0;
@@ -2637,15 +2655,8 @@ int filename_trans_read(policydb_t *p, struct policy_file *fp)
 			 * Some old policies were wrongly generated with
 			 * duplicate filename transition rules.  For backward
 			 * compatibility, do not reject such policies, just
-			 * issue a warning and ignore the duplicate.
+			 * ignore the duplicate.
 			 */
-			WARN(fp->handle,
-			     "Duplicate name-based type_transition %s %s:%s \"%s\":  %s, ignoring",
-			     p->p_type_val_to_name[ft->stype - 1],
-			     p->p_type_val_to_name[ft->ttype - 1],
-			     p->p_class_val_to_name[ft->tclass - 1],
-			     ft->name,
-			     p->p_type_val_to_name[otype->otype - 1]);
 			free(ft);
 			free(name);
 			free(otype);
@@ -2827,27 +2838,44 @@ static int ocontext_read_selinux(struct policydb_compat_info *info,
 				    (&c->context[1], p, fp))
 					return -1;
 				break;
-			case OCON_IBPKEY:
+			case OCON_IBPKEY: {
+				uint32_t pkey_lo, pkey_hi;
+
 				rc = next_entry(buf, fp, sizeof(uint32_t) * 4);
-				if (rc < 0 || buf[2] > 0xffff || buf[3] > 0xffff)
+				if (rc < 0)
 					return -1;
 
+				pkey_lo = le32_to_cpu(buf[2]);
+				pkey_hi = le32_to_cpu(buf[3]);
+
+				if (pkey_lo > UINT16_MAX || pkey_hi > UINT16_MAX)
+					return -1;
+
+				c->u.ibpkey.low_pkey  = pkey_lo;
+				c->u.ibpkey.high_pkey = pkey_hi;
+
+				/* we want c->u.ibpkey.subnet_prefix in network
+				 * (big-endian) order, just memcpy it */
 				memcpy(&c->u.ibpkey.subnet_prefix, buf,
 				       sizeof(c->u.ibpkey.subnet_prefix));
-
-				c->u.ibpkey.low_pkey = le32_to_cpu(buf[2]);
-				c->u.ibpkey.high_pkey = le32_to_cpu(buf[3]);
 
 				if (context_read_and_validate
 				    (&c->context[0], p, fp))
 					return -1;
 				break;
-			case OCON_IBENDPORT:
+			}
+			case OCON_IBENDPORT: {
+				uint32_t port;
+
 				rc = next_entry(buf, fp, sizeof(uint32_t) * 2);
 				if (rc < 0)
 					return -1;
 				len = le32_to_cpu(buf[0]);
 				if (len == 0 || len > IB_DEVICE_NAME_MAX - 1)
+					return -1;
+
+				port = le32_to_cpu(buf[1]);
+				if (port > UINT8_MAX || port == 0)
 					return -1;
 
 				c->u.ibendport.dev_name = malloc(len + 1);
@@ -2857,11 +2885,12 @@ static int ocontext_read_selinux(struct policydb_compat_info *info,
 				if (rc < 0)
 					return -1;
 				c->u.ibendport.dev_name[len] = 0;
-				c->u.ibendport.port = le32_to_cpu(buf[1]);
+				c->u.ibendport.port = port;
 				if (context_read_and_validate
 				    (&c->context[0], p, fp))
 					return -1;
 				break;
+			}
 			case OCON_PORT:
 				rc = next_entry(buf, fp, sizeof(uint32_t) * 3);
 				if (rc < 0)
@@ -3416,7 +3445,7 @@ static int range_read(policydb_t * p, struct policy_file *fp)
 				goto err;
 			rt->target_class = le32_to_cpu(buf[0]);
 		} else
-			rt->target_class = SECCLASS_PROCESS;
+			rt->target_class = p->process_class;
 		r = calloc(1, sizeof(*r));
 		if (!r)
 			goto err;
@@ -3545,7 +3574,9 @@ static int role_trans_rule_read(policydb_t *p, role_trans_rule_t ** r,
 			if (ebitmap_read(&tr->classes, fp))
 				return -1;
 		} else {
-			if (ebitmap_set_bit(&tr->classes, SECCLASS_PROCESS - 1, 1))
+			if (!p->process_class)
+				return -1;
+			if (ebitmap_set_bit(&tr->classes, p->process_class - 1, 1))
 				return -1;
 		}
 
@@ -3922,6 +3953,51 @@ static int scope_read(policydb_t * p, int symnum, struct policy_file *fp)
 	return -1;
 }
 
+static sepol_security_class_t policydb_string_to_security_class(
+	struct policydb *policydb,
+	const char *class_name)
+{
+	class_datum_t *tclass_datum;
+
+	tclass_datum = hashtab_search(policydb->p_classes.table,
+				      (hashtab_key_t) class_name);
+	if (!tclass_datum)
+		return 0;
+	return tclass_datum->s.value;
+}
+
+static sepol_access_vector_t policydb_string_to_av_perm(
+	struct policydb *policydb,
+	sepol_security_class_t tclass,
+	const char *perm_name)
+{
+	class_datum_t *tclass_datum;
+	perm_datum_t *perm_datum;
+
+	if (!tclass || tclass > policydb->p_classes.nprim)
+		return 0;
+	tclass_datum = policydb->class_val_to_struct[tclass - 1];
+
+	perm_datum = (perm_datum_t *)
+			hashtab_search(tclass_datum->permissions.table,
+			(hashtab_key_t)perm_name);
+	if (perm_datum != NULL)
+		return 0x1U << (perm_datum->s.value - 1);
+
+	if (tclass_datum->comdatum == NULL)
+		return 0;
+
+	perm_datum = (perm_datum_t *)
+			hashtab_search(tclass_datum->comdatum->permissions.table,
+			(hashtab_key_t)perm_name);
+
+	if (perm_datum != NULL)
+		return 0x1U << (perm_datum->s.value - 1);
+
+	return 0;
+}
+
+
 /*
  * Read the configuration data from a policy database binary
  * representation file into a policy database structure.
@@ -4149,6 +4225,18 @@ int policydb_read(policydb_t * p, struct policy_file *fp, unsigned verbose)
 		p->symtab[i].nprim = nprim;
 	}
 
+	switch (p->target_platform) {
+	case SEPOL_TARGET_SELINUX:
+		p->process_class = policydb_string_to_security_class(p, "process");
+		p->dir_class = policydb_string_to_security_class(p, "dir");
+		break;
+	case SEPOL_TARGET_XEN:
+		p->process_class = policydb_string_to_security_class(p, "domain");
+		break;
+	default:
+		break;
+	}
+
 	if (policy_type == POLICY_KERN) {
 		if (avtab_read(&p->te_avtab, fp, r_policyvers))
 			goto bad;
@@ -4192,6 +4280,20 @@ int policydb_read(policydb_t * p, struct policy_file *fp, unsigned verbose)
 	if (policydb_index_classes(p))
 		goto bad;
 
+	switch (p->target_platform) {
+	case SEPOL_TARGET_SELINUX:
+		/* fall through */
+	case SEPOL_TARGET_XEN:
+		p->process_trans = policydb_string_to_av_perm(p, p->process_class,
+							      "transition");
+		p->process_trans_dyntrans = p->process_trans |
+			policydb_string_to_av_perm(p, p->process_class,
+						   "dyntransition");
+		break;
+	default:
+		break;
+	}
+
 	if (policydb_index_others(fp->handle, p, verbose))
 		goto bad;
 
@@ -4226,10 +4328,9 @@ int policydb_read(policydb_t * p, struct policy_file *fp, unsigned verbose)
 			if (r_policyvers >= POLICYDB_VERSION_AVTAB) {
 				if (ebitmap_read(&p->type_attr_map[i], fp))
 					goto bad;
-				ebitmap_for_each_bit(&p->type_attr_map[i],
-						     tnode, j) {
-					if (!ebitmap_node_get_bit(tnode, j)
-					    || i == j)
+				ebitmap_for_each_positive_bit(&p->type_attr_map[i],
+							 tnode, j) {
+					if (i == j)
 						continue;
 
 					if (j >= p->p_types.nprim)
@@ -4301,3 +4402,7 @@ int policydb_set_target_platform(policydb_t *p, int platform)
 	return 0;
 }
 
+int policydb_sort_ocontexts(policydb_t *p)
+{
+	return sort_ocontexts(p);
+}
