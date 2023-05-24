@@ -1,3 +1,55 @@
+libsepol (3.4-2.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Fix "Inaccurate copyright file" (Closes: #1031798)
+
+ -- Tobias Frost <tobi@debian.org>  Wed, 24 May 2023 16:43:03 +0200
+
+libsepol (3.4-2) unstable; urgency=medium
+
+  * fix validation of user declarations in modules, patch proposed upstream
+    (Closes: #1012503)
+
+ -- Laurent Bigonville <bigon@debian.org>  Wed, 15 Jun 2022 09:56:48 +0200
+
+libsepol (3.4-1) unstable; urgency=medium
+
+  * New upstream release
+    - debian/libsepol2.symbols: Add newly exported symbols
+  * Enable GPG key validation of the upstream tarball
+  * debian/control: Bump Standards-Version to 4.6.0 (no further changes)
+
+ -- Laurent Bigonville <bigon@debian.org>  Sat, 04 Jun 2022 11:12:29 +0200
+
+libsepol (3.3-1) unstable; urgency=medium
+
+  * debian/libsepol2.symbols: Fix the name of the -dev package, ouupsie
+  * New upstream version 3.3 (Closes: #989434, #990526, CVE-2021-36084,
+    CVE-2021-36085, CVE-2021-36086, CVE-2021-36087)
+  * debian/libsepol2.symbols: Add newly exported symbols
+
+ -- Laurent Bigonville <bigon@debian.org>  Sun, 07 Nov 2021 22:40:09 +0100
+
+libsepol (3.2-1) experimental; urgency=medium
+
+  [ Christian Göttsche ]
+  * d/gitlab-ci.yml: Use Debian recipe
+  * d/control: Bump debhelper compat to level 13
+  * d/control: Bump Standards-Version to 4.5.1 (no further changes)
+  * d/control: Update homepage
+  * d/rules: Enable build hardening
+  * d/rules: Enable -Wall -Wextra
+  * d/control: Convert cute fields
+
+  [ Laurent Bigonville ]
+  * New upstream version 3.2
+  * debian/watch: Update the URL to follow the new tagging format
+  * Bump soname of the library to 2.Drop removed symbols from the .symbols
+    file, also remove the soname from the -dev package and add the necessary
+    Breaks/Replaces
+
+ -- Laurent Bigonville <bigon@debian.org>  Sat, 24 Apr 2021 12:47:42 +0200
+
 libsepol (3.1-1) unstable; urgency=medium
 
   * New upstream release
