@@ -10,7 +10,7 @@ Standards-Version: 4.5.0
 Build-Depends: debhelper-compat (= 12), file, flex
 Homepage: http://userspace.selinuxproject.org/
 Rules-Requires-Root: no
-XS-Pexip-Upstream: http://deb.debian.org/debian/ bullseye
+XS-Pexip-Upstream: http://deb.debian.org/debian/ bookworm
 
 Package: sepol-utils
 Section: admin
