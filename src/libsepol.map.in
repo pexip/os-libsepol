@@ -1,19 +1,14 @@
 LIBSEPOL_1.0 {
   global:
 	cil_add_file;
-	cil_build_policydb;
-	cil_compile;
 	cil_db_destroy;
 	cil_db_init;
-	cil_filecons_to_string;
-	cil_selinuxusers_to_string;
 	cil_set_disable_dontaudit;
 	cil_set_disable_neverallow;
 	cil_set_handle_unknown;
 	cil_set_log_handler;
 	cil_set_log_level;
 	cil_set_preserve_tunables;
-	cil_userprefixes_to_string;
 	expand_module_avrules;
 	sepol_bool_clone;
 	sepol_bool_compare;
@@ -50,9 +45,6 @@ LIBSEPOL_1.0 {
 	sepol_context_to_string;
 	sepol_debug;
 	sepol_expand_module;
-	sepol_genbools;
-	sepol_genbools_array;
-	sepol_genusers;
 	sepol_get_disable_dontaudit;
 	sepol_get_preserve_tunables;
 	sepol_handle_create;
@@ -218,7 +210,6 @@ LIBSEPOL_1.0 {
 	sepol_port_set_port;
 	sepol_port_set_proto;
 	sepol_port_set_range;
-	sepol_set_delusers;
 	sepol_set_disable_dontaudit;
 	sepol_set_expand_consume_base;
 	sepol_set_policydb_from_file;
@@ -278,4 +269,23 @@ LIBSEPOL_1.1 {
 LIBSEPOL_3.0 {
   global:
 	sepol_policydb_optimize;
+	cil_write_parse_ast;
+	cil_write_build_ast;
+	cil_write_resolve_ast;
+	cil_set_qualified_names;
 } LIBSEPOL_1.1;
+
+LIBSEPOL_3.4 {
+  global:
+	sepol_av_perm_to_string;
+	sepol_change_sid;
+	sepol_compute_av;
+	sepol_compute_av_reason;
+	sepol_compute_av_reason_buffer;
+	sepol_context_to_sid;
+	sepol_member_sid;
+	sepol_sid_to_context;
+	sepol_string_to_av_perm;
+	sepol_string_to_security_class;
+	sepol_validate_transition_reason_buffer;
+} LIBSEPOL_3.0;
