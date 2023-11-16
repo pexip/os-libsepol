@@ -1,3 +1,9 @@
+libsepol (3.4-2.1pexip1) pexip-bookworm; urgency=medium
+
+  * Initial bookworm build
+
+ -- Mark Hymers <mark.hymers@pexip.com>  Thu, 16 Nov 2023 10:07:55 +0000
+
 libsepol (3.4-2.1) unstable; urgency=medium
 
   * Non-maintainer upload.
