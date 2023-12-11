@@ -1,3 +1,9 @@
+libsepol (3.4-2.1pexip3) pexip-bookworm; urgency=medium
+
+  * Rebuild for override changes
+
+ -- Mark Hymers <mark.hymers@pexip.com>  Mon, 11 Dec 2023 10:56:41 +0000
+
 libsepol (3.4-2.1pexip2) pexip-bookworm; urgency=medium
 
   * Bookworm build for product distribution
