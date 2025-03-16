@@ -1,3 +1,50 @@
+libsepol (3.8.1-1) unstable; urgency=medium
+
+  * New upstream release, only version number change
+
+ -- Russell Coker <russell@coker.com.au>  Sun, 16 Mar 2025 17:23:19 +1100
+
+libsepol (3.8-1) unstable; urgency=medium
+
+  * New upstream release:
+    Support nlmsg extended permissions
+    Add policy capability netlink_xperm
+    add support for xperms in conditional policies
+
+ -- Russell Coker <russell@coker.com.au>  Thu, 06 Feb 2025 19:24:17 +1100
+
+libsepol (3.7-2) unstable; urgency=medium
+
+  * Updated libsepol2.symbols for the latest entrypoints
+  * Add extra upstream signing key for Petr Lautrbach
+
+ -- Russell Coker <russell@coker.com.au>  Fri, 23 Aug 2024 18:00:54 +1000
+
+libsepol (3.7-1) unstable; urgency=medium
+
+  * New upstream release
+  * Removed the ru man directory
+
+ -- Russell Coker <russell@coker.com.au>  Tue, 06 Aug 2024 22:09:08 +1000
+
+libsepol (3.5-2) unstable; urgency=medium
+
+  * Move libsepol.so.2 to /usr.
+    The move is done directly (without using dh_movetousr) as I don't think
+    we'll have to backport this package. (Closes: #1055921)
+
+ -- Laurent Bigonville <bigon@debian.org>  Fri, 24 Nov 2023 15:46:38 +0100
+
+libsepol (3.5-1) unstable; urgency=medium
+
+  * New upstream release
+    - Drop d/p/0001-libsepol-fix-validation-of-user-declarations-in-modu.patch:
+      applied upstream
+  * debian/upstream/signing-key.asc: Add public key of Jason Zaman
+  * debian/control: Bump Standards-Version to 4.6.2 (no further changes)
+
+ -- Laurent Bigonville <bigon@debian.org>  Sat, 08 Jul 2023 22:44:16 +0200
+
 libsepol (3.4-2.1) unstable; urgency=medium
 
   * Non-maintainer upload.

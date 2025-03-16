@@ -1,4 +1,4 @@
-/* Author : Stephen Smalley, <sds@tycho.nsa.gov> */
+/* Author : Stephen Smalley, <stephen.smalley.work@gmail.com> */
 
 /* FLASK */
 
@@ -39,8 +39,8 @@ typedef struct ebitmap {
 	uint32_t highbit;	/* highest position in the total bitmap */
 } ebitmap_t;
 
-#define ebitmap_is_empty(e) (((e)->highbit) == 0)
-#define ebitmap_length(e) ((e)->highbit)
+#define ebitmap_is_empty(e) (((e)->node) == NULL)
+#define ebitmap_length(e) ((e)->node ? (e)->highbit : 0)
 #define ebitmap_startbit(e) ((e)->node ? (e)->node->startbit : 0)
 #define ebitmap_startnode(e) ((e)->node)
 
@@ -94,6 +94,7 @@ extern int ebitmap_contains(const ebitmap_t * e1, const ebitmap_t * e2);
 extern int ebitmap_match_any(const ebitmap_t *e1, const ebitmap_t *e2);
 extern int ebitmap_get_bit(const ebitmap_t * e, unsigned int bit);
 extern int ebitmap_set_bit(ebitmap_t * e, unsigned int bit, int value);
+extern int ebitmap_init_range(ebitmap_t * e, unsigned int minbit, unsigned int maxbit);
 extern unsigned int ebitmap_highest_set_bit(const ebitmap_t * e);
 extern void ebitmap_destroy(ebitmap_t * e);
 extern int ebitmap_read(ebitmap_t * e, void *fp);

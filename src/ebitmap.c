@@ -1,5 +1,5 @@
 
-/* Author : Stephen Smalley, <sds@tycho.nsa.gov> */
+/* Author : Stephen Smalley, <stephen.smalley.work@gmail.com> */
 
 /* FLASK */
 
@@ -18,20 +18,19 @@
 int ebitmap_or(ebitmap_t * dst, const ebitmap_t * e1, const ebitmap_t * e2)
 {
 	const ebitmap_node_t *n1, *n2;
-	ebitmap_node_t *new, *prev;
+	ebitmap_node_t *new = NULL, **prev;
 
 	ebitmap_init(dst);
 
+	prev = &dst->node;
 	n1 = e1->node;
 	n2 = e2->node;
-	prev = 0;
 	while (n1 || n2) {
 		new = (ebitmap_node_t *) malloc(sizeof(ebitmap_node_t));
 		if (!new) {
 			ebitmap_destroy(dst);
 			return -ENOMEM;
 		}
-		memset(new, 0, sizeof(ebitmap_node_t));
 		if (n1 && n2 && n1->startbit == n2->startbit) {
 			new->startbit = n1->startbit;
 			new->map = n1->map | n2->map;
@@ -47,12 +46,10 @@ int ebitmap_or(ebitmap_t * dst, const ebitmap_t * e1, const ebitmap_t * e2)
 			n2 = n2->next;
 		}
 
-		new->next = 0;
-		if (prev)
-			prev->next = new;
-		else
-			dst->node = new;
-		prev = new;
+		new->next = NULL;
+
+		*prev = new;
+		prev = &new->next;
 	}
 
 	dst->highbit = (e1->highbit > e2->highbit) ? e1->highbit : e2->highbit;
@@ -74,41 +71,138 @@ int ebitmap_union(ebitmap_t * dst, const ebitmap_t * e1)
 
 int ebitmap_and(ebitmap_t *dst, const ebitmap_t *e1, const ebitmap_t *e2)
 {
-	unsigned int i, length = min(ebitmap_length(e1), ebitmap_length(e2));
+	const ebitmap_node_t *n1, *n2;
+	ebitmap_node_t *new = NULL, **prev;
+
 	ebitmap_init(dst);
-	for (i=0; i < length; i++) {
-		if (ebitmap_get_bit(e1, i) && ebitmap_get_bit(e2, i)) {
-			int rc = ebitmap_set_bit(dst, i, 1);
-			if (rc < 0)
-				return rc;
+
+	prev = &dst->node;
+	n1 = e1->node;
+	n2 = e2->node;
+	while (n1 && n2) {
+		if (n1->startbit == n2->startbit) {
+			if (n1->map & n2->map) {
+				new = malloc(sizeof(ebitmap_node_t));
+				if (!new) {
+					ebitmap_destroy(dst);
+					return -ENOMEM;
+				}
+				new->startbit = n1->startbit;
+				new->map = n1->map & n2->map;
+				new->next = NULL;
+
+				*prev = new;
+				prev = &new->next;
+			}
+
+			n1 = n1->next;
+			n2 = n2->next;
+		} else if (n1->startbit > n2->startbit) {
+			n2 = n2->next;
+		} else {
+			n1 = n1->next;
 		}
 	}
+
+	if (new)
+		dst->highbit = new->startbit + MAPSIZE;
+
 	return 0;
 }
 
 int ebitmap_xor(ebitmap_t *dst, const ebitmap_t *e1, const ebitmap_t *e2)
 {
-	unsigned int i, length = max(ebitmap_length(e1), ebitmap_length(e2));
+	const ebitmap_node_t *n1, *n2;
+	ebitmap_node_t *new = NULL, **prev;
+	uint32_t startbit;
+	MAPTYPE map;
+
 	ebitmap_init(dst);
-	for (i=0; i < length; i++) {
-		int val = ebitmap_get_bit(e1, i) ^ ebitmap_get_bit(e2, i);
-		int rc = ebitmap_set_bit(dst, i, val);
-		if (rc < 0)
-			return rc;
+
+	prev = &dst->node;
+	n1 = e1->node;
+	n2 = e2->node;
+	while (n1 || n2) {
+		if (n1 && n2 && n1->startbit == n2->startbit) {
+			startbit = n1->startbit;
+			map = n1->map ^ n2->map;
+			n1 = n1->next;
+			n2 = n2->next;
+		} else if (!n2 || (n1 && n1->startbit < n2->startbit)) {
+			startbit = n1->startbit;
+			map = n1->map;
+			n1 = n1->next;
+		} else {
+			startbit = n2->startbit;
+			map = n2->map;
+			n2 = n2->next;
+		}
+
+		if (map != 0) {
+			new = malloc(sizeof(ebitmap_node_t));
+			if (!new) {
+				ebitmap_destroy(dst);
+				return -ENOMEM;
+			}
+			new->startbit = startbit;
+			new->map = map;
+			new->next = NULL;
+
+			*prev = new;
+			prev = &new->next;
+		}
 	}
+
+	if (new)
+		dst->highbit = new->startbit + MAPSIZE;
+
 	return 0;
 }
 
 int ebitmap_not(ebitmap_t *dst, const ebitmap_t *e1, unsigned int maxbit)
 {
-	unsigned int i;
+	const ebitmap_node_t *n;
+	ebitmap_node_t *new = NULL, **prev;
+	uint32_t startbit, cur_startbit;
+	MAPTYPE map;
+
 	ebitmap_init(dst);
-	for (i=0; i < maxbit; i++) {
-		int val = ebitmap_get_bit(e1, i);
-		int rc = ebitmap_set_bit(dst, i, !val);
-		if (rc < 0)
-			return rc;
+
+	prev = &dst->node;
+	n = e1->node;
+	for (cur_startbit = 0; cur_startbit < maxbit; cur_startbit += MAPSIZE) {
+		if (n && n->startbit == cur_startbit) {
+			startbit = n->startbit;
+			map = ~n->map;
+
+			n = n->next;
+		} else {
+			startbit = cur_startbit;
+			map = ~((MAPTYPE) 0);
+		}
+
+		if (maxbit - cur_startbit < MAPSIZE)
+			map &= (((MAPTYPE)1) << (maxbit - cur_startbit)) - 1;
+
+		if (map != 0) {
+			new = malloc(sizeof(ebitmap_node_t));
+			if (!new) {
+				ebitmap_destroy(dst);
+				return -ENOMEM;
+			}
+
+			new->startbit = startbit;
+			new->map = map;
+			new->next = NULL;
+
+			*prev = new;
+			prev = &new->next;
+		}
 	}
+
+	if (new)
+		dst->highbit = new->startbit + MAPSIZE;
+
 	return 0;
 }
 
@@ -177,26 +271,24 @@ int ebitmap_cmp(const ebitmap_t * e1, const ebitmap_t * e2)
 int ebitmap_cpy(ebitmap_t * dst, const ebitmap_t * src)
 {
 	const ebitmap_node_t *n;
-	ebitmap_node_t *new, *prev;
+	ebitmap_node_t *new = NULL, **prev;
 
 	ebitmap_init(dst);
 	n = src->node;
-	prev = 0;
+	prev = &dst->node;
 	while (n) {
 		new = (ebitmap_node_t *) malloc(sizeof(ebitmap_node_t));
 		if (!new) {
 			ebitmap_destroy(dst);
 			return -ENOMEM;
 		}
-		memset(new, 0, sizeof(ebitmap_node_t));
 		new->startbit = n->startbit;
 		new->map = n->map;
-		new->next = 0;
-		if (prev)
-			prev->next = new;
-		else
-			dst->node = new;
-		prev = new;
+		new->next = NULL;
+
+		*prev = new;
+		prev = &new->next;
+
 		n = n->next;
 	}
 
@@ -328,7 +420,6 @@ int ebitmap_set_bit(ebitmap_t * e, unsigned int bit, int value)
 	new = (ebitmap_node_t *) malloc(sizeof(ebitmap_node_t));
 	if (!new)
 		return -ENOMEM;
-	memset(new, 0, sizeof(ebitmap_node_t));
 
 	new->startbit = startbit;
 	new->map = (MAPBIT << (bit - new->startbit));
@@ -345,6 +436,54 @@ int ebitmap_set_bit(ebitmap_t * e, unsigned int bit, int value)
 		new->next = e->node;
 		e->node = new;
 	}
+
+	return 0;
+}
+
+int ebitmap_init_range(ebitmap_t * e, unsigned int minbit, unsigned int maxbit)
+{
+	ebitmap_node_t *new = NULL, **prev;
+	uint32_t minstartbit = minbit & ~(MAPSIZE - 1);
+	uint32_t maxstartbit = maxbit & ~(MAPSIZE - 1);
+	uint32_t minhighbit = minstartbit + MAPSIZE;
+	uint32_t maxhighbit = maxstartbit + MAPSIZE;
+	uint32_t startbit;
+	MAPTYPE mask;
+
+	ebitmap_init(e);
+
+	if (minbit > maxbit)
+		return -EINVAL;
+
+	if (minhighbit == 0 || maxhighbit == 0)
+		return -EOVERFLOW;
+
+	prev = &e->node;
+
+	for (startbit = minstartbit; startbit <= maxstartbit; startbit += MAPSIZE) {
+		new = malloc(sizeof(ebitmap_node_t));
+		if (!new)
+			return -ENOMEM;
+
+		new->next = NULL;
+		new->startbit = startbit;
+
+		if (startbit != minstartbit && startbit != maxstartbit) {
+			new->map = ~((MAPTYPE)0);
+		} else if (startbit != maxstartbit) {
+			new->map = ~((MAPTYPE)0) << (minbit - startbit);
+		} else if (startbit != minstartbit) {
+			new->map = ~((MAPTYPE)0) >> (MAPSIZE - (maxbit - startbit + 1));
+		} else {
+			mask = ~((MAPTYPE)0) >> (MAPSIZE - (maxbit - minbit + 1));
+			new->map = (mask << (minbit - startbit));
+		}
+
+		*prev = new;
+		prev = &new->next;
+	}
+
+	e->highbit = maxhighbit;
 
 	return 0;
 }
