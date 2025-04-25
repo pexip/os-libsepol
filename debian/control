@@ -10,7 +10,7 @@ Standards-Version: 4.6.0
 Build-Depends: debhelper-compat (= 13), file, flex
 Homepage: https://selinuxproject.org
 Rules-Requires-Root: no
-XS-Pexip-Upstream: http://deb.debian.org/debian/ bookworm
+XS-Pexip-Upstream: http://deb.debian.org/debian/ trixie
 
 Package: sepol-utils
 Section: admin
